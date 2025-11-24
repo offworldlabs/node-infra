@@ -47,6 +47,7 @@ jobs:
             python3-sphinx \
             python3-testinfra \
             rsync \
+            genimage \
             zerofree
 
       - name: Configure Mender tenant token
