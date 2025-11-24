@@ -18,6 +18,8 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       
       - name: Install EDI
         run: |
@@ -36,13 +38,14 @@ jobs:
             dosfstools \
             e2fsprogs \
             fakeroot \
-            genimage \
             git \
             mender-artifact \
             mmdebstrap \
             mtools \
             parted \
             podman \
+            python3-sphinx \
+            python3-testinfra \
             rsync \
             zerofree
       
