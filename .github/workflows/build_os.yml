@@ -48,6 +48,11 @@ jobs:
             python3-testinfra \
             rsync \
             zerofree
+
+      - name: Configure Mender tenant token
+        run: |
+          mkdir -p configuration/mender
+          echo "mender_tenant_token: \"${{ secrets.MENDER_TENANT_TOKEN_DEV }}\"" > configuration/mender/mender_custom.yml
       
       - name: Build OS image
         run: |
