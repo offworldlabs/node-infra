@@ -1,0 +1,65 @@
+name: Build OS Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "OS version (e.g., v1.0.0)"
+        required: true
+      config:
+        description: "EDI config file"
+        required: true
+        default: "pi5-radar.yml"
+
+jobs:
+  build-os:
+    name: Build EDI-PI OS image
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install EDI
+        run: |
+          sudo add-apt-repository ppa:m-luescher/edi-snapshots
+          sudo apt-get update
+          sudo apt-get install -y edi
+      
+      - name: Install build dependencies
+        run: |
+          sudo apt-get install -y \
+            buildah \
+            containers-storage \
+            crun \
+            curl \
+            distrobox \
+            dosfstools \
+            e2fsprogs \
+            fakeroot \
+            genimage \
+            git \
+            mender-artifact \
+            mmdebstrap \
+            mtools \
+            parted \
+            podman \
+            rsync \
+            zerofree
+      
+      - name: Build OS image
+        run: |
+          edi -v project make ${{ inputs.config }}
+      
+      - name: List artifacts
+        run: |
+          ls -lh *.img *.mender 2>/dev/null || echo "No artifacts found"
+          find . -name "*.img" -o -name "*.mender"
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: os-image-${{ inputs.version }}
+          path: |
+            *.img
+            *.mender
+          retention-days: 90
