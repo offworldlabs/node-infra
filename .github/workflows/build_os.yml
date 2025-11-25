@@ -27,6 +27,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y edi
       
+      - name: Install LXD # Needed for documentation generation
+        run: |
+          sudo apt update
+          sudo apt install snapd
+          sudo snap install core
+          sudo snap install lxd
+          sudo usermod -a -G lxd runner
+      
+      - name: Initialize LXD
+        run: |
+          sudo /snap/bin/lxd init --auto
+          sudo /snap/bin/lxd waitready --timeout=300
+          # Verify LXD is ready
+          sudo /snap/bin/lxc version
+      
       - name: Install build dependencies
         run: |
           sudo apt-get install -y \
@@ -57,18 +72,18 @@ jobs:
       
       - name: Build OS image
         run: |
-          edi -v project make ${{ inputs.config }}
+          # Run with lxd group permissions for documentation generation
+          sudo -E sg lxd -c 'edi -vv project make ${{ inputs.config }}'
       
       - name: List artifacts
         run: |
-          ls -lh *.img *.mender 2>/dev/null || echo "No artifacts found"
-          find . -name "*.img" -o -name "*.mender"
+          ls -lh artifacts/*.img artifacts/*.mender 2>/dev/null || echo "No artifacts found"
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: os-image-${{ inputs.version }}
           path: |
-            *.img
-            *.mender
+            artifacts/*.img
+            artifacts/*.mender
           retention-days: 90
