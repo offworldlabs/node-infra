@@ -116,4 +116,20 @@ jobs:
             artifacts/*.img.xz
             artifacts/*.mender
           fail_on_unmatched_files: true
+
+      - name: Get Mender artifact path
+        if: startsWith(github.ref, 'refs/tags/os-v')
+        id: mender_artifact
+        run: |
+          ARTIFACT_PATH=$(ls artifacts/*.mender)
+          echo "path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
+          echo "Found artifact: $ARTIFACT_PATH"
+
+      - name: Upload to Mender
+        if: startsWith(github.ref, 'refs/tags/os-v')
+        uses: mendersoftware/mender-gh-action-upload-artifact@master
+        with:
+          mender_pat: ${{ secrets.MENDER_SERVER_ACCESS_TOKEN_OS }}
+          mender_uri: https://hosted.mender.io
+          mender_artifact: ${{ steps.mender_artifact.outputs.path }}
       
