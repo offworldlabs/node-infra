@@ -105,7 +105,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/os-v')
         run: |
           cd artifacts
-          xz -9 -v *.img
+          IMG_FILE=$(ls *.img)
+          cat "$IMG_FILE" | xz -9 > "${IMG_FILE}.xz"
       
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/os-v')
