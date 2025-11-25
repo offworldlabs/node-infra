@@ -102,12 +102,19 @@ jobs:
             artifacts/*.img
             artifacts/*.mender
           retention-days: 90
+
+      - name: Compress artifacts for release
+        if: startsWith(github.ref, 'refs/tags/os-v')
+        run: |
+          cd artifacts
+          xz -9 -v *.img
       
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/os-v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/*.img
+            artifacts/*.img.xz
             artifacts/*.mender
           fail_on_unmatched_files: true
+      
