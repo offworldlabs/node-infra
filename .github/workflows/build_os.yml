@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "OS version (e.g., v1.0.0)"
+        description: "OS version (e.g., 0.1.0)" 
         required: true
       config:
         description: "EDI config file"
@@ -31,8 +31,9 @@ jobs:
             echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
             echo "config=${{ inputs.config }}" >> $GITHUB_OUTPUT
           else
-            # Extract version from tag (os-v1.0.0)
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            # Extract version from tag (os-v0.1.0 -> 0.1.0)
+            VERSION="${GITHUB_REF_NAME#os-v}"  # Changed: strip os-v prefix
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
             echo "config=blah2-os-pi5.yml" >> $GITHUB_OUTPUT
           fi
       
@@ -85,8 +86,25 @@ jobs:
       
       - name: Build OS image
         run: |
+          # Replace os_version in config with tag version
+          VERSION="${{ steps.version.outputs.version }}"
+          CONFIG="${{ steps.version.outputs.config }}"
+          sed -i "s/os_version: .*/os_version: ${VERSION}/" ${CONFIG}
+          
           # Run with lxd group permissions for documentation generation
           sudo -E sg lxd -c 'edi -vv project make ${{ steps.version.outputs.config }}'
+      
+      - name: Rename artifacts with version  
+        run: |
+          cd artifacts
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Rename main files
+          [ -f "blah2-os-pi5.img" ] && mv "blah2-os-pi5.img" "blah2-os-pi5-v${VERSION}.img"
+          [ -f "blah2-os-pi5.mender" ] && mv "blah2-os-pi5.mender" "blah2-os-pi5-v${VERSION}.mender"
+          
+          echo "Renamed artifacts:"
+          ls -lh *.img *.mender 2>/dev/null || true
       
       - name: List artifacts
         run: |
@@ -132,4 +150,3 @@ jobs:
           mender_pat: ${{ secrets.MENDER_SERVER_ACCESS_TOKEN_OS }}
           mender_uri: https://hosted.mender.io
           mender_artifact: ${{ steps.mender_artifact.outputs.path }}
-      
