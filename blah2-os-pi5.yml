@@ -1,6 +1,8 @@
 general:
     edi_required_minimal_edi_version: 1.19.0
     parameters:
+        os_name: blah2-os-pi5
+        os_version: 0.1.0 # Default, change for manual build, overwritten via GHA
         mender_device_type: generic
         ansible_pipelining: true
         ebs_bootloader_type: "u-boot"

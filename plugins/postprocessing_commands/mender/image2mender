@@ -7,6 +7,10 @@
 #
 # This file is part of the edi project configuration.
 #
+# MODIFIED by Sol Harter 2025
+#  - Added --software-version and --software-name flags
+#  - Enables Mender artifact metadata for version tracking
+#
 # This script is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -38,6 +42,8 @@ Required arguments:
 Optional arguments:
  -h, --help                                : Print help text.
  --log=LEVEL                               : Use --log=DEBUG to trace all commands.
+ --software-version=VERSION                : Software version for provides metadata.
+ --software-name=NAME                      : Software name for provides metadata.
 EOF
 }
 
@@ -62,7 +68,7 @@ unexpected_exit()
     print_error_and_exit "Abnormal script termination."
 }
 
-if ! options=$(getopt -o hi:o:a:t:b: -l help,log:,input:,output:,artifact:,type:,bootloader: -- "$@")
+if ! options=$(getopt -o hi:o:a:t:b: -l help,log:,input:,output:,artifact:,type:,bootloader:,software-version:,software-name: -- "$@")
 then
     print_usage
     print_error_and_exit "Invalid option."
@@ -76,18 +82,22 @@ ARTIFACT_NAME=""
 DEVICE_TYPE=""
 LOG_LEVEL="INFO"
 BOOTLOADER=""
+SOFTWARE_VERSION=""
+SOFTWARE_NAME=""
 
 while true
 do
     case "${1}" in
-        -h|--help)          print_usage && exit 0;;
-        -i|--input)         INPUT_IMAGE="${2}"; shift 2;;
-        -o|--output)        MENDER_ARTIFACT="${2}"; shift 2;;
-        -a|--artifact)      ARTIFACT_NAME="${2}"; shift 2;;
-        -t|--type)          DEVICE_TYPE="${2}"; shift 2;;
-        -b|--bootloader)    BOOTLOADER="${2}"; shift 2;;
-        --log)              LOG_LEVEL="${2}"; shift 2;;
-        *)                  break ;;
+        -h|--help)              print_usage && exit 0;;
+        -i|--input)             INPUT_IMAGE="${2}"; shift 2;;
+        -o|--output)            MENDER_ARTIFACT="${2}"; shift 2;;
+        -a|--artifact)          ARTIFACT_NAME="${2}"; shift 2;;
+        -t|--type)              DEVICE_TYPE="${2}"; shift 2;;
+        -b|--bootloader)        BOOTLOADER="${2}"; shift 2;;
+        --log)                  LOG_LEVEL="${2}"; shift 2;;
+        --software-version)     SOFTWARE_VERSION="${2}"; shift 2;;
+        --software-name)        SOFTWARE_NAME="${2}"; shift 2;;
+        *)                      break ;;
     esac
 done
 
@@ -161,11 +171,21 @@ then
     BOOTPARTITION_SETUP_SCRIPT=( "--script" "${SCRIPTDIR}/ArtifactInstall_Enter_50_BootpartitionSetup" )
 fi
 
+# Build software metadata flags
+SOFTWARE_FLAGS=()
+if [ -n "${SOFTWARE_VERSION}" ]; then
+    SOFTWARE_FLAGS+=( "--software-version" "${SOFTWARE_VERSION}" )
+fi
+if [ -n "${SOFTWARE_NAME}" ]; then
+    SOFTWARE_FLAGS+=( "--software-name" "${SOFTWARE_NAME}" )
+fi
+
 mender-artifact write rootfs-image --device-type "${DEVICE_TYPE}" "${COMPATIBLE_DEVICE[@]}" \
     --artifact-name "${ARTIFACT_NAME}" ${INPUT_OPTION} "${INPUT_IMAGE}" --version 3 \
     --script "${SCRIPTDIR}/ArtifactInstall_Leave_50_ConfigurationBackup" \
     --script "${SCRIPTDIR}/ArtifactReboot_Leave_50_ConfigurationRestore" \
     "${BOOTPARTITION_SETUP_SCRIPT[@]}" \
+    "${SOFTWARE_FLAGS[@]}" \
     --output-path "${MENDER_ARTIFACT}"
 
 trap - EXIT

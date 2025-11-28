@@ -32,7 +32,7 @@ echo 'mender_tenant_token: "TOKEN_HERE"' > configuration/mender/mender_custom.ym
 
 To build the project, run:
 ```bash
-edi -v project make pi5-radar.yml
+edi -v project make blah2-os-pi5.yml
 ```
 
 This will output a series of artifacts, including:
@@ -63,7 +63,7 @@ sudo docker compose up -d --build
 
 To clean the project:
 ```bash
-edi -v project clean pi5-radar.yml
+edi -v project clean blah2-os-pi5.yml
 ```
 
 ## Credits

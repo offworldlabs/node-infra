@@ -9,7 +9,7 @@ on:
       config:
         description: "EDI config file"
         required: true
-        default: "pi5-radar.yml"
+        default: "blah2-os-pi5.yml"
   push:
     tags:
       - 'os-v*.*.*'
@@ -33,7 +33,7 @@ jobs:
           else
             # Extract version from tag (os-v1.0.0)
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-            echo "config=pi5-radar.yml" >> $GITHUB_OUTPUT
+            echo "config=blah2-os-pi5.yml" >> $GITHUB_OUTPUT
           fi
       
       - name: Install EDI
@@ -81,7 +81,7 @@ jobs:
       - name: Configure Mender tenant token
         run: |
           mkdir -p configuration/mender
-          echo "mender_tenant_token: \"${{ secrets.MENDER_TENANT_TOKEN_DEV }}\"" > configuration/mender/mender_custom.yml
+          echo "mender_tenant_token: \"${{ secrets.MENDER_TENANT_TOKEN }}\"" > configuration/mender/mender_custom.yml
       
       - name: Build OS image
         run: |
