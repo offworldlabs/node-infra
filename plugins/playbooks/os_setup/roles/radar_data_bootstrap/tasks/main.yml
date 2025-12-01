@@ -1,14 +1,12 @@
 ---
 # Playbook: radar_data_bootstrap
-# Version: 0.1.1
+# Version: 0.1.2
 # 
 # Purpose: Bootstrap /data/blah2/ with application files from blah2-arm repo
 # 
 # This populates the persistent /data partition with:
-#   - docker-compose.yml
 #   - Configuration files
 #   - Scripts (sdrplay-restart.sh)
-#   - Web assets (HTML, nginx config)
 #   - Test data (optional)
 #
 # Files are fetched from blah2-arm repo at a pinned commit/tag
@@ -85,6 +83,41 @@
     group: root
     recurse: yes
   ignore_errors: yes
+
+# Create systemd service for blah2-stack auto-start after OS updates
+- name: Create blah2-stack auto-start service
+  copy:
+    dest: /etc/systemd/system/blah2-stack.service
+    mode: '0644'
+    owner: root
+    group: root
+    content: |
+      [Unit]
+      Description=Start blah2 stack containers
+      After=docker.service network-online.target
+      Wants=network-online.target
+      Requires=docker.service
+      ConditionPathExists=/data/mender-app/blah2-stack/manifests/docker-compose.yaml
+      
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/data/mender-app/blah2-stack/manifests
+      ExecStart=/usr/bin/docker compose up -d --remove-orphans
+      ExecStop=/usr/bin/docker compose down
+      Restart=on-failure
+      RestartSec=30
+      StartLimitBurst=3
+      StartLimitIntervalSec=300
+      
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable blah2-stack service
+  file:
+    src: /etc/systemd/system/blah2-stack.service
+    dest: /etc/systemd/system/multi-user.target.wants/blah2-stack.service
+    state: link
 
 # 4. Cleanup
 - name: Remove temporary clone
