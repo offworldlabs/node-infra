@@ -5,7 +5,6 @@
 # Purpose: Bootstrap /data/blah2/ with application files from blah2-arm repo
 # 
 # This populates the persistent /data partition with:
-#   - Configuration files
 #   - Scripts (sdrplay-restart.sh)
 #   - Test data (optional)
 #
@@ -38,23 +37,6 @@
     version: "{{ blah2_version }}"
 
 # 3. Copy files to /data/blah2/
-
-- name: Copy config directory
-  copy:
-    src: /tmp/blah2-arm/config/
-    dest: /data/blah2/config/
-    owner: root
-    group: root
-    remote_src: yes
-
-- name: Fix config directory permissions
-  file:
-    path: /data/blah2/config
-    state: directory
-    mode: '0755'
-    owner: root
-    group: root
-    recurse: yes
 
 - name: Copy sdrplay-restart.sh script
   copy:
