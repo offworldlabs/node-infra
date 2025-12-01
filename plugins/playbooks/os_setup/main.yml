@@ -42,6 +42,10 @@
       become: True
       become_user: root
       when: create_default_user
+    - role: user_config #Require password change on first login
+      become: True
+      become_user: root
+      when: create_default_user
     - role: get_edi_io.debian_setup.openssh_server
       become: True
       become_user: root

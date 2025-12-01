@@ -1,0 +1,8 @@
+# @TODO, either force user password change, or disable password access entirely
+# ---
+# - name: Force default user password change on first login
+#   command: chage -d 0 {{ default_user_name }}
+#   when: create_default_user | default(false)
+
+# - name: Lock default user password (SSH keys only)
+#   command: passwd -l {{ default_user_name }}
