@@ -203,3 +203,10 @@
     url: https://raw.githubusercontent.com/mendersoftware/app-update-module/1.1.0/conf/mender-app-docker-compose.conf
     dest: /etc/mender/mender-app-docker-compose.conf
     mode: '0644'
+
+# 5. Install nano for text editing
+- name: Install nano editor
+  apt:
+    name: nano
+    state: present
+    update_cache: yes
