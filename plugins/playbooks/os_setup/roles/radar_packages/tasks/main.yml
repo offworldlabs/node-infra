@@ -58,7 +58,7 @@
       - docker-ce-cli
       - containerd.io
       - docker-buildx-plugin
-      - docker-compose-plugin
+      - docker-compose-plugin=2.29.7-1~debian.12~bookworm # @TODO version and pin all packages
     state: present
     update_cache: yes
 
