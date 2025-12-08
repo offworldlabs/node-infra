@@ -1,0 +1,38 @@
+#!/bin/bash
+set -o errexit
+set -o pipefail
+set -o nounset
+
+IMAGE_FILE="{{ edi_input_artifact_pp_image }}"
+OS_NAME="{{ os_name }}"
+OS_VERSION="{{ os_version }}"
+DEVICE_TYPE="{{ mender_device_type }}-{{ edi_bootstrap_architecture }}"
+ARTIFACT_NAME="${OS_NAME}-v${OS_VERSION}"
+
+echo "Injecting bootstrap artifact into ${IMAGE_FILE}..."
+
+# Find rootfs partition offset
+ROOTFS_OFFSET=$(sfdisk -J "${IMAGE_FILE}" | jq -r '.partitiontable.partitions[] | select(.name=="rootfs_a") | .start * 512')
+
+# Mount rootfs partition
+MOUNT_POINT=$(mktemp -d)
+mount -o loop,offset="${ROOTFS_OFFSET}" "${IMAGE_FILE}" "${MOUNT_POINT}"
+
+# Create bootstrap artifact
+echo "Creating bootstrap artifact: ${ARTIFACT_NAME}"
+mkdir -p "${MOUNT_POINT}/var/lib/mender"
+
+mender-artifact write bootstrap-artifact \
+  --device-type "${DEVICE_TYPE}" \
+  --artifact-name "${ARTIFACT_NAME}" \
+  --software-version "v${OS_VERSION}" \
+  --software-name "${OS_NAME}" \
+  --output-path "${MOUNT_POINT}/var/lib/mender/bootstrap.mender"
+
+echo "Bootstrap artifact created at /var/lib/mender/bootstrap.mender"
+
+# Unmount
+umount "${MOUNT_POINT}"
+rmdir "${MOUNT_POINT}"
+
+echo "Bootstrap artifact successfully injected into image"

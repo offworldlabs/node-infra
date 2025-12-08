@@ -133,3 +133,21 @@
     - fw_printenv
     - fw_setenv
   when: ebs_bootloader_type == "raspberry-pi"
+
+# # Create bootstrap artifact with OS version
+# - name: Create bootstrap artifact for initial OS version
+#   shell: |
+#     OS_NAME="{{ os_name }}"
+#     OS_VERSION="{{ os_version }}"
+#     DEVICE_TYPE="{{ mender_device_type }}"
+#     ARTIFACT_NAME="${OS_NAME}-v${OS_VERSION}"
+    
+#     mkdir -p /var/lib/mender
+    
+#     mender-artifact write bootstrap-artifact \
+#       --device-type "${DEVICE_TYPE}" \
+#       --artifact-name "${ARTIFACT_NAME}" \
+#       --provides "rootfs-image.version:${ARTIFACT_NAME}" \
+#       --output-path /var/lib/mender/bootstrap.mender
+#   args:
+#     creates: /var/lib/mender/bootstrap.mender

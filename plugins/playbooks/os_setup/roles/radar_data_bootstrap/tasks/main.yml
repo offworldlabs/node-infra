@@ -105,3 +105,26 @@
   file:
     path: /tmp/blah2-arm
     state: absent
+
+# 5. Mender bootstrap artifact
+- name: Install mender-artifact temporarily for bootstrap creation
+  apt:
+    name: mender-artifact
+    state: present
+
+- name: Create bootstrap artifact in /var/lib/mender
+  shell: |
+    OS_NAME="{{ os_name }}"
+    OS_VERSION="{{ os_version }}"
+    DEVICE_TYPE="{{ mender_device_type }}"
+    ARTIFACT_NAME="${OS_NAME}-v${OS_VERSION}"
+    
+    mkdir -p /var/lib/mender
+    
+    mender-artifact write bootstrap-artifact \
+      --device-type "${DEVICE_TYPE}" \
+      --artifact-name "${ARTIFACT_NAME}" \
+      --provides "rootfs-image.blah2-os-pi5.version:v${OS_VERSION}" \
+      --output-path /var/lib/mender/bootstrap.mender
+  args:
+    creates: /var/lib/mender/bootstrap.mender

@@ -67,6 +67,13 @@ postprocessing_commands:
             pp_mender_artifact:
                 location: {{ edi_configuration_name }}.mender
                 type: path
+    # 450_inject_bootstrap:
+    #     path: postprocessing_commands/mender_bootstrap/inject_bootstrap_to_image.edi
+    #     require_root: "fakeroot"
+    #     output:
+    #         pp_image_with_bootstrap:
+    #             location: {{ edi_configuration_name }}.img
+    #             type: path
     500_documentation:
         path: postprocessing_commands/documentation/write_doc_v2.edi
         output:
