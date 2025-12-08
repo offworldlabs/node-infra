@@ -9,14 +9,26 @@ Infrastructure for building Mender-enabled OS images and update artifacts for bl
 Before OTA updates can be applied, a base OS image must be flashed to an SD card.
 
 1. **Download the latest release** from [Releases](https://github.com/offworldlab/node-infra/releases)
+
 2. **Flash to SD card** using Raspberry Pi Imager:
    - Device: Raspberry Pi 5
    - OS: Custom → Select `blah2-os-vx.x.x.img`
    - Storage: Your SD card
    - **Important:** Do not apply any OS customisation settings
-3. **Boot the Pi** - Node will appear as "pending" in Mender dashboard
-4. **Accept device** in Mender dashboard
-5. **Deploy blah2-stack** OTA via Mender
+
+3. **Boot the Pi** and wait 30-60 seconds for startup
+
+4. **Configure WiFi** via captive portal:
+   - Connect to WiFi network `node-setup`
+   - Portal should open automatically (or navigate to http://192.168.42.1)
+   - Enter your WiFi SSID and password
+   - Node will reboot and connect to your network
+
+5. **Accept device** in Mender dashboard:
+   - Node will appear as "pending" after connecting to WiFi
+   - Accept the device to enable OTA updates
+
+6. **Deploy blah2-stack** OTA via Mender
 
 ### Creating a Release
 

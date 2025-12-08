@@ -1,6 +1,6 @@
 ---
 # Playbook: radar_packages
-# Version: 0.1.0
+# Version: 0.1.1
 # 
 # Purpose: Pre-load system requirements for blah2 radar application
 # 
@@ -9,6 +9,7 @@
 #   2. System dependencies (graphviz, libusb, libudev, expect)
 #   3. SDRplay API v3.15.2 - Hardware driver for RSPDuo SDR
 #   4. Mender Docker Update Module and requirements
+#   5. Balena-os wifi connect captive portal
 #
 # Target: Raspberry Pi 5 fleet running Debian Bookworm (12.x)
 #
@@ -210,3 +211,86 @@
     name: nano
     state: present
     update_cache: yes
+
+# 6. Install WiFi Connect for captive portal setup
+- name: Install dnsmasq for wifi-connect
+  apt:
+    name: dnsmasq
+    state: present
+
+- name: Stop dnsmasq service
+  shell: systemctl stop dnsmasq || true
+
+- name: Mask dnsmasq service (prevent it from starting)
+  file:
+    src: /dev/null
+    dest: /etc/systemd/system/dnsmasq.service
+    state: link
+    force: yes
+
+- name: Download and extract wifi-connect binary
+  unarchive:
+    src: "https://github.com/balena-os/wifi-connect/releases/download/v4.11.84/wifi-connect-aarch64-unknown-linux-gnu.tar.gz"
+    dest: /tmp/
+    remote_src: yes
+
+- name: Install wifi-connect binary
+  copy:
+    src: /tmp/wifi-connect
+    dest: /usr/local/sbin/wifi-connect
+    mode: '0755'
+    remote_src: yes
+
+- name: Create temp directory for UI extraction
+  file:
+    path: /tmp/wifi-ui-temp
+    state: directory
+
+- name: Download and extract wifi-connect UI
+  unarchive:
+    src: "https://github.com/balena-os/wifi-connect/releases/download/v4.11.84/wifi-connect-ui.tar.gz"
+    dest: /tmp/wifi-ui-temp/
+    remote_src: yes
+
+- name: Create wifi-connect directory
+  file:
+    path: /usr/local/share/wifi-connect
+    state: directory
+    mode: '0755'
+
+- name: Install wifi-connect UI files (move entire directory)
+  shell: cp -r /tmp/wifi-ui-temp /usr/local/share/wifi-connect/ui
+
+- name: Clean up wifi-connect temp files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/wifi-connect
+    - /tmp/wifi-ui-temp
+
+# 7. Create wifi-connect systemd service
+- name: Create wifi-connect systemd service
+  copy:
+    dest: /etc/systemd/system/wifi-connect.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=WiFi Connect Captive Portal
+      After=NetworkManager.service
+      Wants=NetworkManager.service
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/sbin/wifi-connect --portal-ssid node-setup
+      Restart=on-failure
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable wifi-connect service for boot
+  file:
+    src: /etc/systemd/system/wifi-connect.service
+    dest: /etc/systemd/system/multi-user.target.wants/wifi-connect.service
+    state: link
