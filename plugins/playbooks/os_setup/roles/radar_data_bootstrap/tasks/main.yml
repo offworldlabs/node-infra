@@ -174,3 +174,24 @@
   file:
     path: /tmp/retina-gui
     state: absent
+
+# ======================================================================
+# Mender Bootstrap Artifact
+# ======================================================================
+# Creates bootstrap.mender so Mender dashboard shows OS version on first boot
+# Provides key must match OTA artifact format: rootfs-image.<os_name>.version
+
+- name: Install mender-artifact for bootstrap creation
+  apt:
+    name: mender-artifact
+    state: present
+
+- name: Create bootstrap artifact for initial OS version
+  shell: |
+    mender-artifact write bootstrap-artifact \
+      --device-type "{{ mender_device_type }}-{{ edi_bootstrap_architecture }}" \
+      --artifact-name "{{ os_name }}-v{{ os_version }}" \
+      --provides "rootfs-image.{{ os_name }}.version:v{{ os_version }}" \
+      --output-path /var/lib/mender/bootstrap.mender
+  args:
+    creates: /var/lib/mender/bootstrap.mender

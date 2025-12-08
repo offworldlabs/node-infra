@@ -162,4 +162,4 @@
   loop:
     - mender-client
     - mender-auth
-    - mender-update 
+    - mender-update
