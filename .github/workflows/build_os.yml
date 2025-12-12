@@ -56,6 +56,18 @@ jobs:
           # Verify LXD is ready
           sudo /snap/bin/lxc version
       
+      - name: Install mender-artifact from official repo
+        run: |
+          curl -fsSL https://downloads.mender.io/repos/debian/gpg | sudo tee /etc/apt/trusted.gpg.d/mender.asc
+                
+          echo "deb [arch=$(dpkg --print-architecture)] https://downloads.mender.io/repos/workstation-tools ubuntu/$(lsb_release -cs)/stable main" \
+          | sudo tee /etc/apt/sources.list.d/mender.list
+                
+          sudo apt-get update
+          sudo apt-get install -y mender-artifact
+                
+          mender-artifact --version
+
       - name: Install build dependencies
         run: |
           sudo apt-get install -y \
@@ -68,7 +80,6 @@ jobs:
             e2fsprogs \
             fakeroot \
             git \
-            mender-artifact \
             mmdebstrap \
             mtools \
             parted \
