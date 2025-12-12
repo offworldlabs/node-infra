@@ -126,7 +126,9 @@ then
     else
         for cli_arg in "$@"
         do
-            print_environment | grep "^${cli_arg}=.*"
+            # Return exit 0 even when variable doesn't exist (like real fw_printenv)
+            # Mender 5.x rootfs-image module queries optional variables and expects exit 0
+            print_environment | grep "^${cli_arg}=.*" || true
         done
     fi
 elif [[ ${0} == *fw_setenv ]]
@@ -159,16 +161,14 @@ then
 
             while IFS= read -r line
             do
-                read -r -a key_value_pair <<< "${line}"
+                # Split on first '=' to separate key and value
+                IFS='=' read -r key value <<< "${line}"
 
-                if [[ ${#key_value_pair[@]} -eq 2 ]]
+                if [[ -n "${value}" ]]
                 then
-                    update_environment "${key_value_pair[0]}" "${key_value_pair[1]}"
-                elif [[ ${#key_value_pair[@]} -eq 1 ]]
-                then
-                    update_environment "${key_value_pair[0]}" ""
-                    else
-                    print_and_exit "ERROR" "unsupported number of arguments in script"
+                    update_environment "${key}" "${value}"
+                else
+                    update_environment "${key}" ""
                 fi
             done <<< "${SCRIPT}"
         else
