@@ -81,6 +81,11 @@
     src: mender.conf
     dest: /etc/mender/
 
+- name: Write mender fallback configuration for rootfs-image module
+  template:
+    src: mender.conf
+    dest: /var/lib/mender/mender.conf
+
 - name: Write mender-connect configuration.
   template:
     src: mender-connect.conf
