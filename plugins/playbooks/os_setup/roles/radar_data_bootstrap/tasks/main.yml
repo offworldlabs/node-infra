@@ -10,9 +10,9 @@
 #
 # Files are fetched from blah2-arm repo at a pinned commit/tag
 
-# Variables to set in defaults:
-# blah2_repo_url: "https://github.com/offworldlab/blah2-arm.git"
-# blah2_version: "abc123def"  # commit hash or tag
+- name: Load package versions
+  include_vars: versions.yml
+
 
 # 1. Create base directory structure
 - name: Create /data/blah2 directory structure

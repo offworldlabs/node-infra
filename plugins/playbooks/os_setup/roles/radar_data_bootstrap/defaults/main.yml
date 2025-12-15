@@ -1,3 +1,0 @@
-# Specifies the application version for configs to be bootstraped onto the OS image:
-blah2_repo_url: "https://github.com/offworldlab/blah2-arm.git"
-blah2_version: "9d0b6e6"  # @TODO this should be a version tag once available
