@@ -6,8 +6,8 @@ general:
         mender_device_type: generic
         ansible_pipelining: true
         ebs_bootloader_type: "u-boot"
-        default_user_name: pi
-        default_user_group_name: pi
+        default_user_name: node
+        default_user_group_name: node
         debian_distribution_release: bookworm
         ansible_python_interpreter: /usr/bin/python3
 
@@ -60,7 +60,7 @@ postprocessing_commands:
                 location: {{ edi_configuration_name }}_rootfs.ext4
                 type: path
         parameters:
-            hostname: raspberry
+            hostname: retina
     400_mender:
         path: postprocessing_commands/mender/image2mender.edi
         output:
