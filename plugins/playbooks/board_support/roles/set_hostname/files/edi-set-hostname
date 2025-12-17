@@ -54,12 +54,6 @@ trap "abnormal_termination" EXIT
 
 echo "going to adjust hostname"
 
-IDENTITY_SCRIPT="/usr/share/mender/identity/mender-device-identity"
-
-if [ ! -x "${IDENTITY_SCRIPT}" ] ; then
-    print_and_exit "ERROR" "identity script does either not exist or is not executable"
-fi
-
 if systemd-detect-virt --container > /dev/null ; then
     print_and_exit "INFO" "detected container virtualization - not going to adjust hostname"
 fi
@@ -68,15 +62,13 @@ if [[ $EUID -ne 0 ]]; then
    print_and_exit "ERROR" "use root user to execute this script"
 fi
 
-OLD_HOSTNAME=$(cat /etc/hostname)
-HOSTNAME_SUFFIX="$("${IDENTITY_SCRIPT}" | cut -d= -f2 | sed 's/://g')"
-# take care of idempotency by not adding the suffix twice
-NEW_HOSTNAME="${OLD_HOSTNAME%-${HOSTNAME_SUFFIX}}-${HOSTNAME_SUFFIX}"
+# Use simple hostname without MAC suffix for Avahi mDNS .local resolution
+# Avahi will handle hostname conflicts automatically by appending -2, -3, etc.
+HOSTNAME=$(cat /etc/hostname)
 
-# static hostname
-echo "${NEW_HOSTNAME}" > /etc/hostname
-# transient hostname
-hostname "${NEW_HOSTNAME}"
-sed -i "s/^127.0.1.1.*/127.0.1.1   ${NEW_HOSTNAME}/" /etc/hosts
+# Ensure hostname is set in /etc/hosts for local resolution
+if ! grep -q "^127.0.1.1.*${HOSTNAME}" /etc/hosts; then
+    sed -i "s/^127.0.1.1.*/127.0.1.1   ${HOSTNAME}/" /etc/hosts
+fi
 
-print_and_exit "INFO" "hostname successfully adjusted"
+print_and_exit "INFO" "hostname successfully configured for Avahi mDNS"

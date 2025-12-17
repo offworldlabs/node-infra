@@ -83,6 +83,21 @@
       - expect          # Required for SDRplay interactive installer
     state: present
 
+# 2a. Install Avahi for mDNS .local hostname resolution
+- name: Install Avahi mDNS daemon
+  apt:
+    name:
+      - avahi-daemon    # mDNS service for .local hostname advertisement
+      - libnss-mdns     # Name service switch module for mDNS resolution
+    state: present
+    update_cache: yes
+
+- name: Enable Avahi daemon on boot
+  file:
+    src: /lib/systemd/system/avahi-daemon.service
+    dest: /etc/systemd/system/multi-user.target.wants/avahi-daemon.service
+    state: link
+
 # 3. Install SDRplay API
 # 3a) Create directory 
 - name: Create SDRplay lib directory
