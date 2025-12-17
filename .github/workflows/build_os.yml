@@ -20,7 +20,9 @@ jobs:
   build-os:
     name: Build EDI-PI OS image
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -158,6 +160,7 @@ jobs:
             artifacts/*.img.xz
             artifacts/*.mender
           fail_on_unmatched_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get Mender artifact path
         if: startsWith(github.ref, 'refs/tags/os-v')

@@ -8,7 +8,7 @@ Infrastructure for building Mender-enabled OS images and update artifacts for bl
 
 Before OTA updates can be applied, a base OS image must be flashed to an SD card.
 
-1. **Download the latest release** from [Releases](https://github.com/offworldlab/node-infra/releases)
+1. **Download the latest release** from [Releases](https://github.com/offworldlabs/node-infra/releases)
 
 2. **Flash to SD card** using Raspberry Pi Imager:
    - Device: Raspberry Pi 5
