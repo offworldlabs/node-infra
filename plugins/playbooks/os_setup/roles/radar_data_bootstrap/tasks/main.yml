@@ -86,8 +86,6 @@
       RemainAfterExit=yes
       WorkingDirectory=/data/mender-app/blah2-stack/manifests
       ExecStart=/usr/bin/docker compose up -d --remove-orphans
-      Restart=on-failure
-      RestartSec=30
       StartLimitBurst=3
       StartLimitIntervalSec=300
       
