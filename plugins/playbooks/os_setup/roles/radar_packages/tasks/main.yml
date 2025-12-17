@@ -276,14 +276,18 @@
     content: |
       [Unit]
       Description=WiFi Connect Captive Portal
-      After=NetworkManager.service
-      Wants=NetworkManager.service
+      After=NetworkManager.service network-online.target
+      Wants=NetworkManager.service network-online.target
 
       [Service]
       Type=simple
+      # Wait 30 seconds for NetworkManager to connect to saved networks
+      ExecStartPre=/bin/sleep 30
+      # Only start if we don't have internet connectivity
+      ExecStartPre=/bin/bash -c '! /usr/bin/nm-online -t 5 -q'
       ExecStart=/usr/local/sbin/wifi-connect --portal-ssid node-setup
       Restart=on-failure
-      RestartSec=30
+      RestartSec=60
 
       [Install]
       WantedBy=multi-user.target
