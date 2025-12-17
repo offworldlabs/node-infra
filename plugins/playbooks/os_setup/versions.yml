@@ -40,6 +40,6 @@ mender_app_version: "1.1.0"
 mender_app_base_url: "https://raw.githubusercontent.com/mendersoftware/app-update-module/1.1.0"
 
 # blah2 application code --> Copies out scripts and tests
-blah2_repo_url: "https://github.com/offworldlab/blah2-arm.git"
-blah2_version: "v0.1.3"  # Update to specific tag/commit when releasing
+blah2_repo_url: "https://github.com/offworldlabs/blah2-arm.git"
+blah2_version: "v0.1.5"  # Update to specific tag/commit when releasing
 

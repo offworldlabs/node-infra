@@ -8,7 +8,7 @@ Infrastructure for building Mender-enabled OS images and update artifacts for bl
 
 Before OTA updates can be applied, a base OS image must be flashed to an SD card.
 
-1. **Download the latest release** from [Releases](https://github.com/offworldlab/node-infra/releases)
+1. **Download the latest release** from [Releases](https://github.com/offworldlabs/node-infra/releases)
 
 2. **Flash to SD card** using Raspberry Pi Imager:
    - Device: Raspberry Pi 5
@@ -83,16 +83,16 @@ sudo apt install buildah containers-storage crun curl distrobox \
 
 ### Build
 ```bash
-edi -v project make blah2-os-pi5.yml
+edi -v project make owl-os-pi5.yml
 ```
 
 **Output artifacts:**
-- `blah2-os-vx.x.x.img` - Flashable OS image with A/B partitioning
-- `blah2-os-vx.x.x.mender` - OTA update artifact
+- `owl-os-vx.x.x.img` - Flashable OS image with A/B partitioning
+- `owl-os-vx.x.x.mender` - OTA update artifact
 
 ### Clean
 ```bash
-edi -v project clean blah2-os-pi5.yml
+edi -v project clean owl-os-pi5.yml
 ```
 
 ## Default Credentials
