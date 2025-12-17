@@ -11,8 +11,6 @@ on:
         required: true
         default: "owl-os-pi5.yml"
   push:
-    branches:
-      - 'develop'      
     tags:
       - 'os-v*.*.*'
 
@@ -41,17 +39,6 @@ jobs:
             echo "config=owl-os-pi5.yml" >> $GITHUB_OUTPUT
           fi
 
-      - name: Ensure tag is on main branch
-        if: startsWith(github.ref, 'refs/tags/os-v')
-        run: |
-          git fetch origin main
-          if ! git branch -r --contains ${{ github.sha }} | grep -q 'origin/main'; then
-            echo "ERROR: Production tags (os-v*) must be created from main branch!"
-            echo "Current tag is not on main. Aborting."
-            exit 1
-          fi
-          echo "Tag verified on main branch"
-      
       - name: Install EDI
         run: |
           sudo add-apt-repository ppa:m-luescher/edi-snapshots
