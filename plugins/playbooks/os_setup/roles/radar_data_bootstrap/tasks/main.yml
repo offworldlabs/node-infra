@@ -15,7 +15,7 @@
 
 
 # 1. Create base directory structure
-- name: Create /data/blah2 directory structure
+- name: Create /data/retina-node directory structure
   file:
     path: "{{ item }}"
     state: directory
@@ -23,11 +23,12 @@
     owner: root
     group: root
   loop:
-    - /data/blah2
-    - /data/blah2/config
-    - /data/blah2/script
-    - /data/blah2/save
-    - /data/blah2/test
+    - /data/retina-node
+    - /data/retina-node/config
+    - /data/retina-node/blah2
+    - /data/retina-node/blah2/script
+    - /data/retina-node/blah2/save
+    - /data/retina-node/blah2/test
 
 # 2. Clone blah2-arm at pinned version
 - name: Clone blah2-arm repository
@@ -36,12 +37,12 @@
     dest: /tmp/blah2-arm
     version: "{{ blah2_version }}"
 
-# 3. Copy files to /data/blah2/
+# 3. Copy files to /data/retina-node/blah2/
 
 - name: Copy sdrplay-restart.sh script
   copy:
     src: /tmp/blah2-arm/sdrplay-restart.sh
-    dest: /data/blah2/script/sdrplay-restart.sh
+    dest: /data/retina-node/blah2/script/sdrplay-restart.sh
     mode: '0755'
     owner: root
     group: root
@@ -50,7 +51,7 @@
 - name: Copy test directory #Optional could remove?
   copy:
     src: /tmp/blah2-arm/test/
-    dest: /data/blah2/test/
+    dest: /data/retina-node/blah2/test/
     owner: root
     group: root
     remote_src: yes
@@ -58,7 +59,7 @@
 
 - name: Fix test directory permissions #Optional could remove?
   file:
-    path: /data/blah2/test
+    path: /data/retina-node/blah2/test
     state: directory
     mode: '0755'
     owner: root
@@ -66,36 +67,36 @@
     recurse: yes
   ignore_errors: yes
 
-# Create systemd service for blah2-stack auto-start after OS updates
-- name: Create blah2-stack auto-start service
+# Create systemd service for retina-node auto-start after OS updates
+- name: Create retina-node auto-start service
   copy:
-    dest: /etc/systemd/system/blah2-stack.service
+    dest: /etc/systemd/system/retina-node.service
     mode: '0644'
     owner: root
     group: root
     content: |
       [Unit]
-      Description=Start blah2 stack containers
+      Description=Start retina-node stack containers
       After=docker.service network-online.target
       Wants=network-online.target
       Requires=docker.service
-      ConditionPathExists=/data/mender-app/blah2-stack/manifests/docker-compose.yaml
-      
+      ConditionPathExists=/data/mender-app/retina-node/manifests/docker-compose.yaml
+
       [Service]
       Type=oneshot
       RemainAfterExit=yes
-      WorkingDirectory=/data/mender-app/blah2-stack/manifests
+      WorkingDirectory=/data/mender-app/retina-node/manifests
       ExecStart=/usr/bin/docker compose up -d --remove-orphans
       StartLimitBurst=3
       StartLimitIntervalSec=300
-      
+
       [Install]
       WantedBy=multi-user.target
 
-- name: Enable blah2-stack service
+- name: Enable retina-node service
   file:
-    src: /etc/systemd/system/blah2-stack.service
-    dest: /etc/systemd/system/multi-user.target.wants/blah2-stack.service
+    src: /etc/systemd/system/retina-node.service
+    dest: /etc/systemd/system/multi-user.target.wants/retina-node.service
     state: link
 
 # 4. Cleanup
