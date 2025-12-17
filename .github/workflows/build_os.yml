@@ -9,7 +9,7 @@ on:
       config:
         description: "EDI config file"
         required: true
-        default: "blah2-os-pi5.yml"
+        default: "owl-os-pi5.yml"
   push:
     branches:
       - 'develop'      
@@ -36,7 +36,7 @@ jobs:
             # Extract version from tag (os-v0.1.0 -> 0.1.0)
             VERSION="${GITHUB_REF_NAME#os-v}"  # Changed: strip os-v prefix
             echo "version=${VERSION}" >> $GITHUB_OUTPUT
-            echo "config=blah2-os-pi5.yml" >> $GITHUB_OUTPUT
+            echo "config=owl-os-pi5.yml" >> $GITHUB_OUTPUT
           fi
 
       - name: Ensure tag is on main branch
@@ -124,8 +124,8 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           
           # Rename main files
-          [ -f "blah2-os-pi5.img" ] && mv "blah2-os-pi5.img" "blah2-os-pi5-v${VERSION}.img"
-          [ -f "blah2-os-pi5.mender" ] && mv "blah2-os-pi5.mender" "blah2-os-pi5-v${VERSION}.mender"
+          [ -f "owl-os-pi5.img" ] && mv "owl-os-pi5.img" "owl-os-pi5-v${VERSION}.img"
+          [ -f "owl-os-pi5.mender" ] && mv "owl-os-pi5.mender" "owl-os-pi5-v${VERSION}.mender"
           
           echo "Renamed artifacts:"
           ls -lh *.img *.mender 2>/dev/null || true
