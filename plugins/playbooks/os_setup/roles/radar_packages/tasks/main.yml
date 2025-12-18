@@ -81,7 +81,23 @@
       - libusb-1.0-0    # Required by SDRplay service
       - libudev1        # Required for udev device detection
       - expect          # Required for SDRplay interactive installer
+      - wireless-tools  # Required for iwgetid WiFi connection check
     state: present
+
+# 2a. Install Avahi for mDNS .local hostname resolution
+- name: Install Avahi mDNS daemon
+  apt:
+    name:
+      - avahi-daemon    # mDNS service for .local hostname advertisement
+      - libnss-mdns     # Name service switch module for mDNS resolution
+    state: present
+    update_cache: yes
+
+- name: Enable Avahi daemon on boot
+  file:
+    src: /lib/systemd/system/avahi-daemon.service
+    dest: /etc/systemd/system/multi-user.target.wants/avahi-daemon.service
+    state: link
 
 # 3. Install SDRplay API
 # 3a) Create directory 
@@ -276,15 +292,15 @@
     content: |
       [Unit]
       Description=WiFi Connect Captive Portal
-      After=NetworkManager.service network-online.target
-      Wants=NetworkManager.service network-online.target
+      After=NetworkManager.service
+      Wants=NetworkManager.service
 
       [Service]
       Type=simple
-      # Wait 30 seconds for NetworkManager to connect to saved networks
+      # Wait 30 seconds for NetworkManager to connect to saved WiFi networks
       ExecStartPre=/bin/sleep 30
-      # Only start if we don't have internet connectivity
-      ExecStartPre=/bin/bash -c '! /usr/bin/nm-online -t 5 -q'
+      # Only start if WiFi is not connected (using balena's recommended approach)
+      ExecStartPre=/bin/bash -c '! iwgetid -r'
       ExecStart=/usr/local/sbin/wifi-connect --portal-ssid node-setup
       Restart=on-failure
       RestartSec=60
