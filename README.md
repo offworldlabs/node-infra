@@ -1,36 +1,34 @@
-# blah2 Node Infrastructure
+# Owl OS
 
-Infrastructure for building Mender-enabled OS images and update artifacts for blah2 radar deployment. Pre-loaded with system requirements (Docker, SDRplay API, Graphviz) and designed for automated CI deployment to Raspberry Pi 5.
+Mender-enabled OS images for Raspberry Pi 5 radar nodes. The image comes pre-loaded with Docker, SDRplay API, Avahi mDNS, and a WiFi captive portal for easy setup.
+
+##  Contents
+
+- **Docker CE** with Compose plugin
+- **SDRplay API v3.15** for RSPDuo hardware
+- **Avahi mDNS** for `<hostname>.local` discovery
+- **WiFi Connect** captive portal for network setup
+- **Mender client** for OTA updates
 
 ## Quick Start
 
-### Initial Installation
+1. **Flash the image** to an SD card using Raspberry Pi Imager
+   - Download from [Releases](https://github.com/offworldlabs/node-infra/releases)
+   - Select `owl-os-vx.x.x.img` as custom OS
+   - Do not apply OS customisation settings
 
-Before OTA updates can be applied, a base OS image must be flashed to an SD card.
+2. **Boot and connect to WiFi**
+   - Connect to the `node-setup` WiFi network
+   - Captive portal opens automatically (or go to http://192.168.42.1)
+   - Enter your WiFi credentials - node reboots and connects
 
-1. **Download the latest release** from [Releases](https://github.com/offworldlabs/node-infra/releases)
+3. **Accept device in Mender**
+   - Node appears as "pending" once online
+   - Accept to enable OTA updates
 
-2. **Flash to SD card** using Raspberry Pi Imager:
-   - Device: Raspberry Pi 5
-   - OS: Custom → Select `blah2-os-vx.x.x.img`
-   - Storage: Your SD card
-   - **Important:** Do not apply any OS customisation settings
+4. **Deploy [retina-node](https://github.com/offworldlabs/retina-node) stack** via Mender OTA
 
-3. **Boot the Pi** and wait 30-60 seconds for startup
-
-4. **Configure WiFi** via captive portal:
-   - Connect to WiFi network `node-setup`
-   - Portal should open automatically (or navigate to http://192.168.42.1)
-   - Enter your WiFi SSID and password
-   - Node will reboot and connect to your network
-
-5. **Accept device** in Mender dashboard:
-   - Node will appear as "pending" after connecting to WiFi
-   - Accept the device to enable OTA updates
-
-6. **Deploy blah2-stack** OTA via Mender
-
-### Creating a Release
+## Creating a Release
 
 Tag a commit with `os-vx.x.x` and push:
 ```bash
@@ -47,14 +45,14 @@ This triggers the GHA workflow (`.github/workflows/build_os.yml`) which:
 
 ## Configuration
 
-### SSH Access
+### SSH Access (Dev Only)
 
-public SSH keys can be added to the `ssh_pub_keys/` folder:
+Public SSH keys can be added to `ssh_pub_keys/`:
 ```bash
 cp ~/.ssh/id_ed25519.pub ssh_pub_keys/yourname.pub
 ```
 
-Keys in this folder are automatically added to deployed nodes.
+Keys are baked into the image at build time.
 
 ### Mender Tenant Token
 
@@ -97,7 +95,7 @@ edi -v project clean owl-os-pi5.yml
 
 ## Default Credentials
 
-- **Username:** `pi`
+- **Username:** `node`
 - **Password:** `raspberry`
 
 ## Credits
