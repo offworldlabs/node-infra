@@ -1,6 +1,6 @@
 ---
 # Playbook: radar_data_bootstrap
-# Version: 0.1.2
+# Version: 0.1.3
 # 
 # Purpose: Bootstrap /data/blah2/ with application files from blah2-arm repo
 # 
@@ -30,14 +30,31 @@
     - /data/retina-node/blah2/save
     - /data/retina-node/blah2/test
 
-# 2. Clone blah2-arm at pinned version
+# 2. Create default tar1090.env for first boot
+- name: Create default tar1090.env for first boot
+  copy:
+    dest: /data/retina-node/config/tar1090.env
+    mode: '0644'
+    owner: root
+    group: root
+    force: no  # Don't overwrite if config-merger has already populated it
+    content: |
+      # Default tar1090 environment - will be overwritten by config-merger
+      # These are placeholder values for Docker Compose parsing on first boot
+      RECEIVER_LAT=0
+      RECEIVER_LON=0
+      RECEIVER_ALT=0
+      ADSBLOL_ENABLED=false
+      ADSBLOL_RADIUS=40
+
+# 3. Clone blah2-arm at pinned version
 - name: Clone blah2-arm repository
   git:
     repo: "{{ blah2_repo_url }}"
     dest: /tmp/blah2-arm
     version: "{{ blah2_version }}"
 
-# 3. Copy files to /data/retina-node/blah2/
+# 4. Copy files to /data/retina-node/blah2/
 
 - name: Copy sdrplay-restart.sh script
   copy:
@@ -99,7 +116,7 @@
     dest: /etc/systemd/system/multi-user.target.wants/retina-node.service
     state: link
 
-# 4. Cleanup
+# 5. Cleanup
 - name: Remove temporary clone
   file:
     path: /tmp/blah2-arm
