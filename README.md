@@ -98,6 +98,8 @@ edi -v project clean owl-os-pi5.yml
 - **Username:** `node`
 - **Password:** `raspberry`
 
+> **Note:** SSH password authentication is disabled for security. These credentials only work for console access (HDMI/keyboard or serial). For SSH, use key-based authentication - see [SSH Access](#ssh-access-dev-only) above.
+
 ## Credits
 
 Built using [EDI-PI](https://github.com/lueschem/edi-pi) by [lueschem](https://github.com/lueschem).
