@@ -76,6 +76,9 @@
     - role: radar_packages # Install Radar Packages
       become: True
       become_user: root
+    - role: cpu_governor # Set CPU governor to schedutil for better performance
+      become: True
+      become_user: root
     - role: radar_data_bootstrap # Configure /data/ persistent partition
       become: True
       become_user: root
