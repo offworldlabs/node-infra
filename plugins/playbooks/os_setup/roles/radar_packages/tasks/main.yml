@@ -323,6 +323,11 @@
     creates: /opt/sdrconnect
   register: sdrconnect_output
 
+- name: Fix SDRconnect shared library permissions
+  shell: chmod 644 /opt/sdrconnect/*.so
+  args:
+    warn: false
+
 - name: Clean up SDRconnect installer
   file:
     path: "/opt/sdrconnect-{{ sdrconnect_version }}"
