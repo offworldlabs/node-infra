@@ -30,6 +30,10 @@ docker_compose_version: "2.29.7-1~debian.12~bookworm"
 sdrplay_version: "3.15.2"
 sdrplay_url: "https://www.sdrplay.com/software/SDRplay_RSP_API-Linux-3.15.2.run"
 
+# SDRconnect for standalone SDR radio analysis
+sdrconnect_version: "1.0.5"
+sdrconnect_url: "https://www.sdrplay.com/software/SDRconnect_linux-arm64_583e89db6.run"
+
 # Balena WiFi Connect for captive portal
 balena_wifi_version: "v4.11.84"
 balena_binary_url: "https://github.com/balena-os/wifi-connect/releases/download/v4.11.84/wifi-connect-aarch64-unknown-linux-gnu.tar.gz"
