@@ -324,9 +324,14 @@
   register: sdrconnect_output
 
 - name: Fix SDRconnect shared library permissions
-  shell: chmod 644 /opt/sdrconnect/*.so
-  args:
-    warn: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: '0644'
+  loop:
+    - /opt/sdrconnect/libHarfBuzzSharp.so
+    - /opt/sdrconnect/libSkiaSharp.so
+    - /opt/sdrconnect/swig_bindings.so
+    - /opt/sdrconnect/sdrconnect.ico
 
 - name: Clean up SDRconnect installer
   file:
