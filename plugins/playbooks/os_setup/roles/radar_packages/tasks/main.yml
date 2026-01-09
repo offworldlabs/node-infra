@@ -1,15 +1,19 @@
 ---
 # Playbook: radar_packages
-# Version: 0.1.1
-# 
-# Purpose: Pre-load system requirements for blah2 radar application
-# 
+# Version: 0.2.0
+#
+# Purpose: Pre-load system requirements for blah2 radar application and supporting tools
+#
 # This playbook installs the essential system components needed to run blah2 on Raspberry Pi 5:
 #   1. Docker CE 27.x & Docker Compose v2 - Container runtime for blah2 services
-#   2. System dependencies (graphviz, libusb, libudev, expect)
-#   3. SDRplay API v3.15.2 - Hardware driver for RSPDuo SDR
-#   4. Mender Docker Update Module and requirements
-#   5. Balena-os wifi connect captive portal
+#   2. System dependencies (graphviz, libusb, libudev, expect, wireless-tools)
+#   3. Avahi mDNS daemon - .local hostname resolution
+#   4. SDRplay API v3.15.2 - Hardware driver for RSPDuo SDR
+#   5. Mender Docker Update Module and requirements
+#   6. Chrony - NTP clock disciplining for accurate timing
+#   7. Cloudflared - Secure tunneling for remote access
+#   8. SDRconnect - Standalone SDR analysis tool
+#   9. WiFi Connect captive portal (Balena) - Easy WiFi setup
 #
 # Target: Raspberry Pi 5 fleet running Debian Bookworm (12.x)
 #
@@ -227,6 +231,113 @@
     state: present
     update_cache: yes
 
+# 5a. Install Chrony for improved NTP clock disciplining
+- name: Install Chrony NTP daemon
+  apt:
+    name: chrony
+    state: present
+    update_cache: yes
+
+# 5b. Install Cloudflared for secure tunneling
+- name: Add Cloudflare's GPG key
+  shell: |
+    mkdir -p --mode=0755 /usr/share/keyrings
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+  args:
+    creates: /usr/share/keyrings/cloudflare-main.gpg
+
+- name: Add Cloudflare repository
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main"
+    state: present
+    filename: cloudflared
+
+- name: Install Cloudflared
+  apt:
+    name: cloudflared
+    state: present
+    update_cache: yes
+
+# 5c. Install SDRconnect for standalone SDR analysis
+- name: Install SDRconnect dependencies
+  apt:
+    name:
+      - libmp3lame-dev
+      - file              # Required by SDRconnect installer for platform detection
+      - libasound2        # Required by SDRconnect for audio output (64-bit time_t version)
+    state: present
+    update_cache: yes
+
+- name: Create SDRconnect directory
+  file:
+    path: "/opt/sdrconnect-{{ sdrconnect_version }}"
+    state: directory
+    mode: '0755'
+
+- name: Download SDRconnect installer
+  get_url:
+    url: "{{ sdrconnect_url }}"
+    dest: "/opt/sdrconnect-{{ sdrconnect_version }}/SDRconnect_linux-arm64_583e89db6.run"
+    mode: '0755'
+
+- name: Install SDRconnect (automated with expect)
+  shell: |
+    expect << 'EOF'
+    set timeout 120
+    log_user 1
+
+    spawn ./SDRconnect_linux-arm64_583e89db6.run
+
+    # Press RETURN to view license
+    expect "Press RETURN"
+    send "\r"
+
+    # Wait for 'more' pager, then quit
+    sleep 1
+    send "q"
+
+    # Accept license
+    expect "Please answer y or n"
+    send "y\r"
+
+    # Accept default installation location (/opt/sdrconnect)
+    expect "Installation location"
+    send "\r"
+
+    # Confirm installation
+    expect "y/n"
+    send "y\r"
+
+    # Skip desktop menu entry (headless device)
+    expect "menu entry"
+    send "n\r"
+
+    # Skip background service (would conflict with blah2)
+    expect "background service"
+    send "n\r"
+
+    expect eof
+    EOF
+  args:
+    chdir: "/opt/sdrconnect-{{ sdrconnect_version }}"
+    creates: /opt/sdrconnect
+  register: sdrconnect_output
+
+- name: Fix SDRconnect shared library permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: '0644'
+  loop:
+    - /opt/sdrconnect/libHarfBuzzSharp.so
+    - /opt/sdrconnect/libSkiaSharp.so
+    - /opt/sdrconnect/swig_bindings.so
+    - /opt/sdrconnect/sdrconnect.ico
+
+- name: Clean up SDRconnect installer
+  file:
+    path: "/opt/sdrconnect-{{ sdrconnect_version }}"
+    state: absent
+
 # 6. Install WiFi Connect for captive portal setup
 - name: Install dnsmasq for wifi-connect
   apt:
@@ -301,7 +412,11 @@
       ExecStartPre=/bin/sleep 30
       # Only start if WiFi is not connected (using balena's recommended approach)
       ExecStartPre=/bin/bash -c '! iwgetid -r'
+      # Stop Docker containers to free port 80 for captive portal (if deployed)
+      ExecStartPre=-/bin/bash -c 'test -f /data/mender-app/retina-node/manifests/docker-compose.yml && cd /data/mender-app/retina-node/manifests && docker compose -p retina-node down'
       ExecStart=/usr/local/sbin/wifi-connect --portal-ssid node-setup
+      # Restart Docker containers after WiFi is configured (if deployed)
+      ExecStopPost=-/bin/bash -c 'test -f /data/mender-app/retina-node/manifests/docker-compose.yml && cd /data/mender-app/retina-node/manifests && docker compose -p retina-node up -d'
       Restart=on-failure
       RestartSec=60
 

@@ -22,3 +22,9 @@
     src: edi-resize-rootfs.service
     dest: /lib/systemd/system/
 
+- name: Enable resize rootfs service for first boot
+  file:
+    src: /lib/systemd/system/edi-resize-rootfs.service
+    dest: /etc/systemd/system/sysinit.target.wants/edi-resize-rootfs.service
+    state: link
+

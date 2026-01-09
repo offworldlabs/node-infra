@@ -1,0 +1,25 @@
+---
+# Role: cpu_governor
+# Version: 0.1.0
+#
+# Purpose: Set CPU frequency scaling governor to schedutil for better performance
+#
+# By default, Raspberry Pi OS uses the 'powersave' governor which limits the CPU
+# to 1.5 GHz. This role configures 'schedutil' which dynamically scales frequency
+# based on scheduler utilization hints, providing better performance while still
+# being power-efficient.
+#
+# Verification after boot:
+#   cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+#   (should output: schedutil)
+#
+# Target: Raspberry Pi 5 fleet running Debian Bookworm (12.x)
+
+- name: Set CPU governor to schedutil via udev rule
+  copy:
+    dest: /etc/udev/rules.d/60-schedutil-governor.rules
+    mode: '0644'
+    content: |
+      # Set CPU frequency scaling governor to schedutil for all CPUs
+      # schedutil provides better performance than powersave while remaining power-efficient
+      KERNEL=="cpu*", SUBSYSTEM=="cpu", ATTR{cpufreq/scaling_governor}="schedutil"

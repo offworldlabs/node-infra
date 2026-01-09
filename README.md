@@ -6,9 +6,26 @@ Mender-enabled OS images for Raspberry Pi 5 radar nodes. The image comes pre-loa
 
 - **Docker CE** with Compose plugin
 - **SDRplay API v3.15** for RSPDuo hardware
+- **SDRconnect v1.0.5** for standalone SDR analysis
+- **Chrony** for NTP clock disciplining
+- **Cloudflared** for secure tunneling
 - **Avahi mDNS** for `<hostname>.local` discovery
 - **WiFi Connect** captive portal for network setup
 - **Mender client** for OTA updates
+
+## SDRconnect
+
+Run in server mode (headless device):
+```bash
+/opt/sdrconnect/SDRconnect --server
+```
+
+Connect from a SDRconnect client on another machine using the Pi's IP.
+
+> **Warning:** Conflicts with blah2 - stop containers first:
+> ```bash
+> cd /data/mender-app/retina-node/manifests && docker compose -p retina-node down
+> ```
 
 ## Quick Start
 
