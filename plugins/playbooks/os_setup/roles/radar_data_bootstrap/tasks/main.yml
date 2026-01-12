@@ -116,8 +116,61 @@
     dest: /etc/systemd/system/multi-user.target.wants/retina-node.service
     state: link
 
-# 5. Cleanup
-- name: Remove temporary clone
+# 5. Cleanup blah2
+- name: Remove temporary blah2 clone
   file:
     path: /tmp/blah2-arm
+    state: absent
+
+# ======================================================================
+# retina-gui Web Interface
+# ======================================================================
+
+# 6. Clone retina-gui at pinned version
+- name: Clone retina-gui repository
+  git:
+    repo: "{{ retina_gui_repo_url }}"
+    dest: /tmp/retina-gui
+    version: "{{ retina_gui_version }}"
+
+# 7. Copy entire retina-gui to /opt (app code updates with OS)
+- name: Copy retina-gui to /opt
+  copy:
+    src: /tmp/retina-gui/
+    dest: /opt/retina-gui/
+    remote_src: yes
+
+# 8. Create /data/retina-gui for persistent SSH keys
+- name: Create /data/retina-gui directory
+  file:
+    path: /data/retina-gui
+    state: directory
+    mode: '0755'
+
+# 9. Install and enable systemd service
+- name: Copy retina-gui systemd service
+  copy:
+    src: /tmp/retina-gui/systemd/retina-gui.service
+    dest: /etc/systemd/system/retina-gui.service
+    mode: '0644'
+    remote_src: yes
+
+- name: Enable retina-gui service for boot
+  file:
+    src: /etc/systemd/system/retina-gui.service
+    dest: /etc/systemd/system/multi-user.target.wants/retina-gui.service
+    state: link
+
+# 10. Configure SSH to read authorized_keys from /data/
+- name: Configure sshd AuthorizedKeysFile for persistent keys
+  lineinfile:
+    dest: /etc/ssh/sshd_config
+    regexp: '^#*\s*AuthorizedKeysFile'
+    line: 'AuthorizedKeysFile /data/retina-gui/authorized_keys .ssh/authorized_keys'
+    state: present
+
+# 11. Cleanup retina-gui
+- name: Remove temporary retina-gui clone
+  file:
+    path: /tmp/retina-gui
     state: absent
