@@ -47,3 +47,7 @@ mender_app_base_url: "https://raw.githubusercontent.com/mendersoftware/app-updat
 blah2_repo_url: "https://github.com/offworldlabs/blah2-arm.git"
 blah2_version: "v0.1.5"  # Update to specific tag/commit when releasing
 
+# retina-gui web interface
+retina_gui_repo_url: "https://github.com/offworldlabs/retina-gui.git"
+retina_gui_version: "v0.1.0"  # SSH key management release
+

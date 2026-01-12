@@ -62,14 +62,14 @@ This triggers the GHA workflow (`.github/workflows/build_os.yml`) which:
 
 ## Configuration
 
-### SSH Access (Dev Only)
+### SSH Access
 
-Public SSH keys can be added to `ssh_pub_keys/`:
+**End users:** Add your SSH key via the web GUI at `http://retina.local` after boot. Keys are stored persistently and survive reboots and OTA updates.
+
+**Developers:** Public keys can be baked into the image at build time by adding them to `ssh_pub_keys/`:
 ```bash
 cp ~/.ssh/id_ed25519.pub ssh_pub_keys/yourname.pub
 ```
-
-Keys are baked into the image at build time.
 
 ### Mender Tenant Token
 
