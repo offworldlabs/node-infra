@@ -295,6 +295,7 @@
       Description=WiFi Connect Captive Portal
       After=NetworkManager.service
       Wants=NetworkManager.service
+      Before=retina-gui.service
 
       [Service]
       Type=simple
@@ -302,11 +303,11 @@
       ExecStartPre=/bin/sleep 30
       # Only start if WiFi is not connected (using balena's recommended approach)
       ExecStartPre=/bin/bash -c '! iwgetid -r'
-      # Stop Docker containers to free port 80 for captive portal (if deployed)
-      ExecStartPre=-/bin/bash -c 'test -f /data/mender-app/retina-node/manifests/docker-compose.yml && cd /data/mender-app/retina-node/manifests && docker compose -p retina-node down'
+      # Stop retina-gui to free port 80 for captive portal
+      ExecStartPre=-/bin/systemctl stop retina-gui.service
       ExecStart=/usr/local/sbin/wifi-connect --portal-ssid node-setup
-      # Restart Docker containers after WiFi is configured (if deployed)
-      ExecStopPost=-/bin/bash -c 'test -f /data/mender-app/retina-node/manifests/docker-compose.yml && cd /data/mender-app/retina-node/manifests && docker compose -p retina-node up -d'
+      # Restart retina-gui after WiFi is configured
+      ExecStopPost=-/bin/systemctl start retina-gui.service
       Restart=on-failure
       RestartSec=60
 
