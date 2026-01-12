@@ -33,7 +33,7 @@ DISK_IMAGE="{{ pp_image }}"
 PARTITION_IMAGE="{{ pp_partition_image }}"
 WORKDIR="{{ edi_work_directory }}"
 HOSTNAME="{{ hostname }}"
-ARTIFACT_NAME="${BUILD_TIMESTAMP}-{{ edi_configuration_name }}-{{ debian_distribution_release }}-{{ edi_bootstrap_architecture }}"
+ARTIFACT_NAME="{{ os_name }}-v{{ os_version }}"
 
 print_error()
 {
