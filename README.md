@@ -45,26 +45,11 @@ Connect from a SDRconnect client on another machine using the Pi's IP.
 
 4. **Deploy [retina-node](https://github.com/offworldlabs/retina-node) stack** via Mender OTA
 
-## Creating a Release
-
-Tag a commit with `os-vx.x.x` and push:
-```bash
-git tag os-v1.0.0
-git push origin os-v1.0.0
-```
-
-This triggers the GHA workflow (`.github/workflows/build_os.yml`) which:
-1. Builds OS image and Mender artifact
-2. Uploads to GitHub Releases
-3. Uploads Mender artifact to OffWorld Lab Mender server
-
-> **Note:** Currently triggers on any `os-v*` tag. TODO: Change to only PR merges into main.
-
 ## Configuration
 
 ### Node Configuration
 
-After deploying retina-node, visit `http://retina.local` to configure the node and manage SSH keys.
+After deploying retina-node, visit `http://retina.local` to add and manage SSH keys. See the readme in [retina-node](https://github.com/offworldlabs/retina-node) for updating config (TODO config via GUI).
 
 ### SSH Access
 
@@ -81,6 +66,22 @@ Keys persist across reboots and OTA updates.
 ```bash
 cp ~/.ssh/id_ed25519.pub ssh_pub_keys/yourname.pub
 ```
+
+## Creating a Release
+
+Tag a commit with `os-vx.x.x` and push:
+```bash
+git tag os-v1.0.0
+git push origin os-v1.0.0
+```
+
+This triggers the GHA workflow (`.github/workflows/build_os.yml`) which:
+1. Builds OS image and Mender artifact
+2. Uploads to GitHub Releases
+3. Uploads Mender artifact to OffWorld Lab Mender server
+
+> **Note:** Currently triggers on any `os-v*` tag. TODO: Change to only PR merges into main.
+
 
 ### Mender Tenant Token
 
