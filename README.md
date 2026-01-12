@@ -62,9 +62,20 @@ This triggers the GHA workflow (`.github/workflows/build_os.yml`) which:
 
 ## Configuration
 
+### Node Configuration
+
+After deploying retina-node, visit `http://retina.local` to configure the node and manage SSH keys.
+
 ### SSH Access
 
-**End users:** Add your SSH key via the web GUI at `http://retina.local` after boot. Keys are stored persistently and survive reboots and OTA updates.
+**End users:** Add your SSH key via the web GUI at `http://retina.local` after boot. Once added, connect with:
+```bash
+ssh node@retina.local
+# or by IP
+ssh node@<ip-address>
+```
+
+Keys persist across reboots and OTA updates.
 
 **Developers:** Public keys can be baked into the image at build time by adding them to `ssh_pub_keys/`:
 ```bash
