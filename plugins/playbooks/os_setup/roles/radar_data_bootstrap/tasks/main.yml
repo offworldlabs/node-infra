@@ -103,7 +103,7 @@
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=/data/mender-app/retina-node/manifests
-      ExecStart=/usr/bin/docker compose up -d --remove-orphans
+      ExecStart=/usr/bin/docker compose -p retina-node up -d --remove-orphans
       StartLimitBurst=3
       StartLimitIntervalSec=300
 
