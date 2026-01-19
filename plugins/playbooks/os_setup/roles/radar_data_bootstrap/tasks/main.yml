@@ -14,7 +14,31 @@
   include_vars: versions.yml
 
 
-# 1. Create base directory structure
+# 1. Configure Docker persistent storage on /data partition
+# Per Mender docs: Docker images must be stored on persistent partition
+# to survive A/B rootfs OTA updates. Default /var/lib/docker is wiped.
+# See: https://docs.mender.io/artifact-creation/create-an-artifact
+
+- name: Create Docker data directory on persistent partition
+  file:
+    path: /data/docker
+    state: directory
+    mode: '0711'
+    owner: root
+    group: root
+
+- name: Configure Docker daemon for persistent storage
+  copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "data-root": "/data/docker"
+      }
+    mode: '0644'
+    owner: root
+    group: root
+
+# 2. Create base directory structure
 - name: Create /data/retina-node directory structure
   file:
     path: "{{ item }}"
@@ -30,7 +54,7 @@
     - /data/retina-node/blah2/save
     - /data/retina-node/blah2/test
 
-# 2. Create default tar1090.env for first boot
+# 3. Create default tar1090.env for first boot
 - name: Create default tar1090.env for first boot
   copy:
     dest: /data/retina-node/config/tar1090.env
