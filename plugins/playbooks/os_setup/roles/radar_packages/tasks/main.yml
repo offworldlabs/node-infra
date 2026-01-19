@@ -406,7 +406,8 @@
       Description=WiFi Connect Captive Portal
       After=NetworkManager.service
       Wants=NetworkManager.service
-      Before=retina-gui.service
+      # Note: No Before=retina-gui.service - let GUI start immediately
+      # wifi-connect will stop it only if captive portal is actually needed
 
       [Service]
       Type=simple
