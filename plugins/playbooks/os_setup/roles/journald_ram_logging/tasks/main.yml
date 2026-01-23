@@ -1,0 +1,26 @@
+---
+# Playbook: journald_ram_logging
+# Version: 0.1.0
+#
+# Purpose: Configure systemd-journald for volatile (RAM-only) storage with size caps
+#
+# This ensures container and system logs don't wear out SD card/eMMC storage
+# while keeping RAM usage bounded. Works with Docker's journald log driver.
+
+- name: Create journald.conf.d directory
+  file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Configure journald for volatile storage with RAM cap
+  copy:
+    dest: /etc/systemd/journald.conf.d/ram-cap.conf
+    content: |
+      [Journal]
+      Storage=volatile
+      RuntimeMaxUse=50M
+      RuntimeMaxFileSize=5M
+    mode: '0644'
+    owner: root
+    group: root

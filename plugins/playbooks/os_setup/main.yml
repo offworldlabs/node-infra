@@ -61,6 +61,10 @@
       become: True
       become_user: root
       when: target_is_bare_metal
+    - role: journald_ram_logging
+      become: True
+      become_user: root
+      when: target_is_bare_metal
     - role: resize_rootfs
       become: True
       become_user: root

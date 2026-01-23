@@ -27,12 +27,16 @@
     owner: root
     group: root
 
-- name: Configure Docker daemon for persistent storage
+- name: Configure Docker daemon for persistent storage with RAM-based logging
   copy:
     dest: /etc/docker/daemon.json
     content: |
       {
-        "data-root": "/data/docker"
+        "data-root": "/data/docker",
+        "log-driver": "journald",
+        "log-opts": {
+          "tag": "{{.Name}}"
+        }
       }
     mode: '0644'
     owner: root
