@@ -33,6 +33,10 @@
     content: |
       {
         "data-root": "/data/docker",
+        "storage-driver": "overlay2",
+        "features": {
+          "containerd-snapshotter": false
+        },
         "log-driver": "journald",
         "log-opts": {
           "tag": "{{.Name}}"
@@ -41,6 +45,10 @@
     mode: '0644'
     owner: root
     group: root
+# Note: Docker 29+ uses containerd image store by default, which ignores data-root
+# for image layers. Setting containerd-snapshotter: false uses classic overlay2
+# storage so ALL data goes to data-root and persists across Mender A/B updates.
+# See: https://docs.mender.io/artifact-creation/create-an-artifact
 
 # 2. Create base directory structure
 - name: Create /data/retina-node directory structure
