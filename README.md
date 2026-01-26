@@ -51,6 +51,19 @@ Connect from a SDRconnect client on another machine using the Pi's IP.
 
 After deploying retina-node, visit `http://retina.local` to add and manage SSH keys. See the readme in [retina-node](https://github.com/offworldlabs/retina-node) for updating config (TODO config via GUI).
 
+### Cloudflare Tunnel (Optional)
+
+To enable Cloudflare tunnel forwarding, create a token file on the node:
+
+```bash
+mkdir -p /data/cloudflared
+echo "YOUR_TUNNEL_TOKEN" > /data/cloudflared/tunnel-token
+chmod 600 /data/cloudflared/tunnel-token
+systemctl start cloudflared
+```
+
+The token persists across OTA updates.
+
 ### SSH Access
 
 **End users:** Add your SSH key via the web GUI at `http://retina.local` after boot. Once added, connect with:
