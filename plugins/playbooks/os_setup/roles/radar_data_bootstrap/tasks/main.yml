@@ -39,7 +39,7 @@
         },
         "log-driver": "journald",
         "log-opts": {
-          "tag": "{{.Name}}"
+          "tag": "{% raw %}{{.Name}}{% endraw %}"
         }
       }
     mode: '0644'
