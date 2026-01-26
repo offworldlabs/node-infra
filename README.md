@@ -13,20 +13,6 @@ Mender-enabled OS images for Raspberry Pi 5 radar nodes. The image comes pre-loa
 - **WiFi Connect** captive portal for network setup
 - **Mender client** for OTA updates
 
-## SDRconnect
-
-Run in server mode (headless device):
-```bash
-/opt/sdrconnect/SDRconnect --server
-```
-
-Connect from a SDRconnect client on another machine using the Pi's IP.
-
-> **Warning:** Conflicts with blah2 - stop containers first:
-> ```bash
-> cd /data/mender-app/retina-node/manifests && docker compose -p retina-node down
-> ```
-
 ## Quick Start
 
 1. **Flash the image** to an SD card using Raspberry Pi Imager
@@ -95,6 +81,19 @@ This triggers the GHA workflow (`.github/workflows/build_os.yml`) which:
 
 > **Note:** Currently triggers on any `os-v*` tag. TODO: Change to only PR merges into main.
 
+## SDRconnect
+
+Run in server mode (headless device):
+```bash
+/opt/sdrconnect/SDRconnect --server
+```
+
+Connect from a SDRconnect client on another machine using the Pi's IP.
+
+> **Warning:** Conflicts with blah2 - stop containers first:
+> ```bash
+> cd /data/mender-app/retina-node/manifests && docker compose -p retina-node down
+> ```
 
 ### Mender Tenant Token
 
