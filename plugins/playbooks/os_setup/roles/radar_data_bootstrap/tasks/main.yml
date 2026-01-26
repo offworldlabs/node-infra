@@ -14,7 +14,43 @@
   include_vars: versions.yml
 
 
-# 1. Create base directory structure
+# 1. Configure Docker persistent storage on /data partition
+# Per Mender docs: Docker images must be stored on persistent partition
+# to survive A/B rootfs OTA updates. Default /var/lib/docker is wiped.
+# See: https://docs.mender.io/artifact-creation/create-an-artifact
+
+- name: Create Docker data directory on persistent partition
+  file:
+    path: /data/docker
+    state: directory
+    mode: '0711'
+    owner: root
+    group: root
+
+- name: Configure Docker daemon for persistent storage with RAM-based logging
+  copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "data-root": "/data/docker",
+        "storage-driver": "overlay2",
+        "features": {
+          "containerd-snapshotter": false
+        },
+        "log-driver": "journald",
+        "log-opts": {
+          "tag": "{% raw %}{{.Name}}{% endraw %}"
+        }
+      }
+    mode: '0644'
+    owner: root
+    group: root
+# Note: Docker 29+ uses containerd image store by default, which ignores data-root
+# for image layers. Setting containerd-snapshotter: false uses classic overlay2
+# storage so ALL data goes to data-root and persists across Mender A/B updates.
+# See: https://docs.mender.io/artifact-creation/create-an-artifact
+
+# 2. Create base directory structure
 - name: Create /data/retina-node directory structure
   file:
     path: "{{ item }}"
@@ -30,7 +66,7 @@
     - /data/retina-node/blah2/save
     - /data/retina-node/blah2/test
 
-# 2. Create default tar1090.env for first boot
+# 3. Create default tar1090.env for first boot
 - name: Create default tar1090.env for first boot
   copy:
     dest: /data/retina-node/config/tar1090.env
@@ -103,7 +139,7 @@
       Type=oneshot
       RemainAfterExit=yes
       WorkingDirectory=/data/mender-app/retina-node/manifests
-      ExecStart=/usr/bin/docker compose -p retina-node up -d --remove-orphans
+      ExecStart=/bin/bash -c '/usr/bin/docker compose -p retina-node run --rm config-merger && /usr/bin/docker compose -p retina-node up -d --remove-orphans'
       StartLimitBurst=3
       StartLimitIntervalSec=300
 
