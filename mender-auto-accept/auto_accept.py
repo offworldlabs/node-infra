@@ -2,12 +2,12 @@
 """Auto-accept pending Mender devices.
 
 Polls the Mender Management API for pending devices and accepts them automatically.
-Optionally filters by device_type to only accept known device types.
+Optionally filters by node_id prefix to only accept known devices.
 
 Environment variables:
     MENDER_PAT: Personal Access Token for Mender API (required)
     MENDER_SERVER: Mender server URL (default: https://hosted.mender.io)
-    DEVICE_TYPE_FILTER: Only accept devices with this type (optional)
+    NODE_ID_PREFIX: Only accept devices with node_id starting with this (optional)
 """
 import os
 import sys
@@ -16,7 +16,7 @@ import requests
 
 MENDER_SERVER = os.environ.get("MENDER_SERVER", "https://hosted.mender.io")
 MENDER_PAT = os.environ.get("MENDER_PAT")
-DEVICE_TYPE_FILTER = os.environ.get("DEVICE_TYPE_FILTER", "")  # e.g., "pi5-v3-arm64"
+NODE_ID_PREFIX = os.environ.get("NODE_ID_PREFIX", "")  # e.g., "ret"
 
 
 def get_pending_devices() -> list[dict]:
@@ -42,12 +42,16 @@ def accept_auth_set(device_id: str, auth_set_id: str) -> None:
     resp.raise_for_status()
 
 
-def get_device_type(device: dict) -> str | None:
-    """Extract device_type from device identity data."""
+def get_node_id(device: dict) -> str | None:
+    """Extract node_id from device identity data."""
+    # Check top-level identity_data
+    if "node_id" in device.get("identity_data", {}):
+        return device["identity_data"]["node_id"]
+    # Fall back to auth_sets
     for auth_set in device.get("auth_sets", []):
         identity = auth_set.get("identity_data", {})
-        if "device_type" in identity:
-            return identity["device_type"]
+        if "node_id" in identity:
+            return identity["node_id"]
     return None
 
 
@@ -71,11 +75,11 @@ def main() -> int:
 
     for device in pending:
         device_id = device["id"]
-        device_type = get_device_type(device)
+        node_id = get_node_id(device)
 
-        # Optional filter by device type
-        if DEVICE_TYPE_FILTER and device_type != DEVICE_TYPE_FILTER:
-            print(f"Skipping device {device_id} (type: {device_type})")
+        # Optional filter by node_id prefix
+        if NODE_ID_PREFIX and (not node_id or not node_id.startswith(NODE_ID_PREFIX)):
+            print(f"Skipping {device_id} (node_id: {node_id})")
             skipped += 1
             continue
 
@@ -83,10 +87,10 @@ def main() -> int:
             if auth_set["status"] == "pending":
                 try:
                     accept_auth_set(device_id, auth_set["id"])
-                    print(f"Accepted device {device_id} (type: {device_type})")
+                    print(f"Accepted {node_id or device_id}")
                     accepted += 1
                 except requests.RequestException as e:
-                    print(f"Error accepting device {device_id}: {e}", file=sys.stderr)
+                    print(f"Error accepting {node_id or device_id}: {e}", file=sys.stderr)
 
     print(f"Done: {accepted} accepted, {skipped} skipped")
     return 0
