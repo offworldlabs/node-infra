@@ -1,0 +1,15 @@
+[Unit]
+Description=Auto-accept pending Mender devices
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/node-infra/mender-auto-accept/auto_accept.py
+EnvironmentFile=/opt/node-infra/mender-auto-accept/.env
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
