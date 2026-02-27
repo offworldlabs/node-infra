@@ -11,5 +11,5 @@ EnvironmentFile=/home/jehan/retina/node-infra/mender-auto-accept/.env
 # Security hardening
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=yes
+ProtectHome=no
 PrivateTmp=yes
