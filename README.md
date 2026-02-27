@@ -14,7 +14,9 @@ git clone https://github.com/offworldlabs/node-infra.git ~/retina/node-infra
 cd ~/retina/node-infra/mender-auto-accept
 
 # 2. Install Python dependencies
-pip3 install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
 # 3. Configure
 cp .env.example .env
@@ -34,10 +36,12 @@ journalctl -u mender-auto-accept -f
 
 ```bash
 cd ~/retina/node-infra/mender-auto-accept
-pip3 install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 export MENDER_PAT=your-token
 export NODE_ID_PREFIX=ret
-python3 auto_accept.py
+python auto_accept.py
 ```
 
 ### Configuration
