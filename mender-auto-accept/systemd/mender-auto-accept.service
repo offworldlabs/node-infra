@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /home/jehan/retina/node-infra/mender-auto-accept/auto_accept.py
+ExecStart=/home/jehan/retina/node-infra/mender-auto-accept/.venv/bin/python /home/jehan/retina/node-infra/mender-auto-accept/auto_accept.py
 EnvironmentFile=/home/jehan/retina/node-infra/mender-auto-accept/.env
 
 # Security hardening
