@@ -10,8 +10,8 @@ Automatically accepts pending Mender devices. Runs on your central server (not o
 
 ```bash
 # 1. Clone to server
-git clone https://github.com/offworldlabs/node-infra.git /opt/node-infra
-cd /opt/node-infra/mender-auto-accept
+git clone https://github.com/offworldlabs/node-infra.git ~/retina/node-infra
+cd ~/retina/node-infra/mender-auto-accept
 
 # 2. Install Python dependencies
 pip3 install -r requirements.txt
@@ -20,7 +20,7 @@ pip3 install -r requirements.txt
 cp .env.example .env
 nano .env  # Add your MENDER_PAT
 
-# 4. Install systemd timer (runs every 2 min)
+# 4. Install systemd timer (runs every 30s)
 sudo cp systemd/*.service systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now mender-auto-accept.timer
@@ -33,7 +33,7 @@ journalctl -u mender-auto-accept -f
 ### Test locally
 
 ```bash
-cd /opt/node-infra/mender-auto-accept
+cd ~/retina/node-infra/mender-auto-accept
 pip3 install -r requirements.txt
 export MENDER_PAT=your-token
 export NODE_ID_PREFIX=ret
@@ -52,7 +52,7 @@ Edit `.env`:
 
 ### How it works
 
-1. Timer triggers every 2 minutes
+1. Timer triggers every 30 seconds
 2. Script fetches pending devices from Mender API
 3. Filters by `node_id` prefix (if configured)
 4. Accepts matching devices
