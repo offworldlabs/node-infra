@@ -6,3 +6,6 @@
 __pycache__/
 *.py[cod]
 .venv/
+
+# Runtime state
+.pending-deploys.json

@@ -25,7 +25,8 @@ MENDER_PAT = os.environ.get("MENDER_PAT")
 NODE_ID_PREFIX = os.environ.get("NODE_ID_PREFIX", "")  # e.g., "ret"
 DEVICE_TYPE = os.environ.get("DEVICE_TYPE", "pi5-v3-arm64")
 PENDING_DEPLOY_FILE = os.environ.get(
-    "PENDING_DEPLOY_FILE", "/tmp/mender-pending-deploys.json"
+    "PENDING_DEPLOY_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".pending-deploys.json"),
 )
 HEADERS = {"Authorization": f"Bearer {MENDER_PAT}"} if MENDER_PAT else {}
 
