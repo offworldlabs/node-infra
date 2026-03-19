@@ -67,6 +67,25 @@ def get_node_id(device: dict) -> str | None:
     return None
 
 
+def is_device_accepted(device_id: str) -> bool:
+    """Check if a device is still in 'accepted' state on Mender.
+
+    Returns False if device is decommissioned, rejected, pending, or not found.
+    """
+    try:
+        resp = requests.get(
+            f"{MENDER_SERVER}/api/management/v2/devauth/devices/{device_id}",
+            headers=HEADERS,
+            timeout=30,
+        )
+        if resp.status_code == 404:
+            return False
+        resp.raise_for_status()
+        return resp.json().get("status") == "accepted"
+    except requests.RequestException:
+        return True  # Network error — assume accepted, retry next cycle
+
+
 # --- OS deployment for new nodes ---
 
 
@@ -142,12 +161,19 @@ def create_deployment(device_id: str, artifact_name: str) -> None:
 def deploy_if_outdated(device_id: str, node_id: str | None) -> bool:
     """Check device OS version and create deployment if outdated.
 
-    Returns True if handled (deployed or up-to-date), False if inventory not ready yet.
+    Returns True if handled (deployed or up-to-date).
+    Returns False if inventory not ready yet (will retry next cycle).
     """
     label = node_id or device_id[:8]
 
     try:
         inventory = get_device_inventory(device_id)
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            print(f"  {label}: device not found (404), removing from queue", file=sys.stderr)
+            return True  # Device decommissioned/removed — stop retrying
+        print(f"  Could not get inventory for {label}: {e}", file=sys.stderr)
+        return False
     except requests.RequestException as e:
         print(f"  Could not get inventory for {label}: {e}", file=sys.stderr)
         return False
@@ -231,8 +257,9 @@ def main() -> int:
                     accept_auth_set(device_id, auth_set["id"])
                     print(f"Accepted {node_id or device_id}")
                     accepted += 1
-                    # Queue for deployment check
-                    pending_deploys[device_id] = node_id
+                    # Queue for deployment check (skip if already queued)
+                    if device_id not in pending_deploys:
+                        pending_deploys[device_id] = node_id
                 except requests.RequestException as e:
                     print(f"Error accepting {node_id or device_id}: {e}", file=sys.stderr)
 
@@ -247,7 +274,15 @@ def main() -> int:
     if pending_deploys:
         print(f"Checking {len(pending_deploys)} device(s) for OS deployment...")
         done = []
-        for device_id, node_id in pending_deploys.items():
+        for device_id, node_id in list(pending_deploys.items()):
+            label = node_id or device_id[:8]
+
+            # Validate device is still accepted — remove stale entries
+            if not is_device_accepted(device_id):
+                print(f"  {label}: no longer accepted on Mender, removing from queue")
+                done.append(device_id)
+                continue
+
             if deploy_if_outdated(device_id, node_id):
                 done.append(device_id)
 
