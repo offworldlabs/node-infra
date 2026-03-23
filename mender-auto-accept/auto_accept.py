@@ -262,10 +262,12 @@ def main() -> int:
         return 1
 
     # Also check accepted devices for pending auth sets (reflashed nodes)
+    reauth_device_ids = set()
     try:
         reauth = get_accepted_devices_with_pending_auth()
         if reauth:
             print(f"Found {len(reauth)} accepted device(s) with pending re-auth")
+            reauth_device_ids = {d["id"] for d in reauth}
             pending.extend(reauth)
     except requests.RequestException as e:
         print(f"Error checking re-auth devices: {e}", file=sys.stderr)
@@ -290,8 +292,9 @@ def main() -> int:
                     accept_auth_set(device_id, auth_set["id"])
                     print(f"Accepted {node_id or device_id}")
                     accepted += 1
-                    # Queue for deployment check (skip if already queued)
-                    if device_id not in pending_deploys:
+                    # Queue for deployment check — but NOT for re-authed devices
+                    # (they're already onboarded, just got a new keypair)
+                    if device_id not in pending_deploys and device_id not in reauth_device_ids:
                         pending_deploys[device_id] = node_id
                 except requests.RequestException as e:
                     print(f"Error accepting {node_id or device_id}: {e}", file=sys.stderr)
