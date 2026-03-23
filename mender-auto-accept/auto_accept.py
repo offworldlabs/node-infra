@@ -43,6 +43,30 @@ def get_pending_devices() -> list[dict]:
     return resp.json()
 
 
+def get_accepted_devices_with_pending_auth() -> list[dict]:
+    """Fetch accepted devices that have pending auth sets.
+
+    Handles the case where a device was previously accepted but has been
+    reflashed with a new keypair. Mender keeps the device as "accepted"
+    but adds a new auth set with status "pending" that needs approval.
+    """
+    resp = requests.get(
+        f"{MENDER_SERVER}/api/management/v2/devauth/devices",
+        params={"status": "accepted"},
+        headers=HEADERS,
+        timeout=30,
+    )
+    resp.raise_for_status()
+
+    devices_with_pending = []
+    for device in resp.json():
+        for auth_set in device.get("auth_sets", []):
+            if auth_set["status"] == "pending":
+                devices_with_pending.append(device)
+                break
+    return devices_with_pending
+
+
 def accept_auth_set(device_id: str, auth_set_id: str) -> None:
     """Accept a device's authentication set."""
     resp = requests.put(
@@ -229,13 +253,22 @@ def main() -> int:
         print("Error: MENDER_PAT environment variable not set", file=sys.stderr)
         return 1
 
-    # --- Phase 1: Accept pending devices ---
+    # --- Phase 1: Accept pending devices (new + reflashed) ---
 
     try:
         pending = get_pending_devices()
     except requests.RequestException as e:
         print(f"Error fetching pending devices: {e}", file=sys.stderr)
         return 1
+
+    # Also check accepted devices for pending auth sets (reflashed nodes)
+    try:
+        reauth = get_accepted_devices_with_pending_auth()
+        if reauth:
+            print(f"Found {len(reauth)} accepted device(s) with pending re-auth")
+            pending.extend(reauth)
+    except requests.RequestException as e:
+        print(f"Error checking re-auth devices: {e}", file=sys.stderr)
 
     accepted = 0
     skipped = 0
