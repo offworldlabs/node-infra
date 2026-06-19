@@ -4,6 +4,13 @@
 Polls the Mender Management API for pending devices, accepts them, then checks
 if their OS is outdated. If so, creates a one-off deployment targeting that device.
 
+Reflashed devices (same node_id, new keypair) show up as "accepted" with a
+new pending auth set rather than a brand-new pending device. These are
+accepted too, but only queued for deployment if retina-gui's setup wizard
+reports (via the wizard_pending inventory attribute) that this is genuinely
+a first-run wizard pass — otherwise an in-service node whose key merely
+rotated would get force-updated and rebooted unexpectedly.
+
 Only stable releases (vX.X.X) are considered — RC, dev, beta etc. are filtered out.
 
 Environment variables:
@@ -132,6 +139,20 @@ def extract_artifact_name(inventory: dict) -> str | None:
     return None
 
 
+def extract_wizard_pending(inventory: dict) -> bool:
+    """Extract the wizard_pending inventory attribute reported by retina-gui's
+    mender-inventory-retina-wizard script.
+
+    Defaults to False (safe) if absent — older OS images that predate this
+    script, or any inventory glitch, should never be treated as "definitely
+    mid first-run wizard".
+    """
+    for attr in inventory.get("attributes", []):
+        if attr.get("name") == "wizard_pending":
+            return str(attr.get("value")).lower() == "true"
+    return False
+
+
 def parse_stable_version(name: str) -> tuple[int, ...] | None:
     """Parse semver from artifact name. Returns None for non-stable (rc, dev, etc.)."""
     match = re.search(r"v(\d+)\.(\d+)\.(\d+)$", name)
@@ -182,10 +203,18 @@ def create_deployment(device_id: str, artifact_name: str) -> None:
     resp.raise_for_status()
 
 
-def deploy_if_outdated(device_id: str, node_id: str | None) -> bool:
+def deploy_if_outdated(device_id: str, node_id: str | None, requires_wizard_check: bool = False) -> bool:
     """Check device OS version and create deployment if outdated.
 
-    Returns True if handled (deployed or up-to-date).
+    requires_wizard_check is set for re-authenticated (reflashed) devices,
+    where a new keypair on an already-"accepted" device is ambiguous: it
+    could be a reflash going through first-run setup again, or it could be
+    an already in-service node whose Mender key merely rotated. We only
+    auto-deploy to the former, gated on the wizard_pending inventory
+    attribute retina-gui's setup wizard reports (see
+    mender-inventory-retina-wizard in owl-os).
+
+    Returns True if handled (deployed, up-to-date, or correctly skipped).
     Returns False if inventory not ready yet (will retry next cycle).
     """
     label = node_id or device_id[:8]
@@ -206,6 +235,10 @@ def deploy_if_outdated(device_id: str, node_id: str | None) -> bool:
     if not current:
         print(f"  No artifact_name in inventory for {label} yet, will retry")
         return False
+
+    if requires_wizard_check and not extract_wizard_pending(inventory):
+        print(f"  {label}: re-authed but not running first-time wizard, skipping deployment")
+        return True
 
     latest = get_latest_stable_artifact()
     if not latest:
@@ -233,16 +266,31 @@ def deploy_if_outdated(device_id: str, node_id: str | None) -> bool:
 # Persisted to disk so we retry across script invocations (runs every 30s via timer).
 
 
-def load_pending_deploys() -> dict[str, str | None]:
-    """Load {device_id: node_id} map of devices awaiting deployment."""
+def load_pending_deploys() -> dict[str, dict]:
+    """Load {device_id: {"node_id": ..., "requires_wizard_check": ...}} map of
+    devices awaiting deployment.
+
+    Normalizes entries written by older versions of this script, which
+    stored a bare node_id string instead of a dict (those were always
+    freshly-pending devices, never re-auth, so requires_wizard_check=False
+    is the correct backfill).
+    """
     try:
         with open(PENDING_DEPLOY_FILE) as f:
-            return json.load(f)
+            raw = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+    normalized = {}
+    for device_id, value in raw.items():
+        if isinstance(value, dict):
+            normalized[device_id] = value
+        else:
+            normalized[device_id] = {"node_id": value, "requires_wizard_check": False}
+    return normalized
 
-def save_pending_deploys(pending: dict[str, str | None]) -> None:
+
+def save_pending_deploys(pending: dict[str, dict]) -> None:
     """Save pending deploys to disk."""
     with open(PENDING_DEPLOY_FILE, "w") as f:
         json.dump(pending, f)
@@ -292,10 +340,15 @@ def main() -> int:
                     accept_auth_set(device_id, auth_set["id"])
                     print(f"Accepted {node_id or device_id}")
                     accepted += 1
-                    # Queue for deployment check — but NOT for re-authed devices
-                    # (they're already onboarded, just got a new keypair)
-                    if device_id not in pending_deploys and device_id not in reauth_device_ids:
-                        pending_deploys[device_id] = node_id
+                    # Queue for deployment check. Re-authed devices (reflashed,
+                    # same node_id/new keypair) are queued too, but gated in
+                    # deploy_if_outdated() on whether they're actually running
+                    # the first-time wizard — see requires_wizard_check.
+                    if device_id not in pending_deploys:
+                        pending_deploys[device_id] = {
+                            "node_id": node_id,
+                            "requires_wizard_check": device_id in reauth_device_ids,
+                        }
                 except requests.RequestException as e:
                     print(f"Error accepting {node_id or device_id}: {e}", file=sys.stderr)
 
@@ -310,7 +363,9 @@ def main() -> int:
     if pending_deploys:
         print(f"Checking {len(pending_deploys)} device(s) for OS deployment...")
         done = []
-        for device_id, node_id in list(pending_deploys.items()):
+        for device_id, info in list(pending_deploys.items()):
+            node_id = info["node_id"]
+            requires_wizard_check = info.get("requires_wizard_check", False)
             label = node_id or device_id[:8]
 
             # Validate device is still accepted — remove stale entries
@@ -319,7 +374,7 @@ def main() -> int:
                 done.append(device_id)
                 continue
 
-            if deploy_if_outdated(device_id, node_id):
+            if deploy_if_outdated(device_id, node_id, requires_wizard_check):
                 done.append(device_id)
 
         for device_id in done:
