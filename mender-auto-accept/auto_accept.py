@@ -154,16 +154,8 @@ def extract_wizard_pending(inventory: dict) -> bool:
 
 
 def parse_stable_version(name: str) -> tuple[int, ...] | None:
-    r"""Parse semver from artifact name. Returns None for non-stable (rc, dev, etc.).
-
-    TEMP: also matches a trailing "-dev" suffix so the wizard_pending re-auth
-    gate can be tested with a -dev artifact instead of a real stable release.
-    This widens what counts as "latest" for EVERY device going through the
-    auto-accept pipeline, not just one test device. MUST be reverted to the
-    strict r"v(\d+)\.(\d+)\.(\d+)$" before this runs against the real fleet
-    again — see memory: node-infra-dev-tag-test-loosening.
-    """
-    match = re.search(r"v(\d+)\.(\d+)\.(\d+)(?:-dev)?$", name)
+    """Parse semver from artifact name. Returns None for non-stable (rc, dev, etc.)."""
+    match = re.search(r"v(\d+)\.(\d+)\.(\d+)$", name)
     if not match:
         return None
     return tuple(int(x) for x in match.groups())
