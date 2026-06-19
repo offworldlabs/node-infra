@@ -154,7 +154,7 @@ def extract_wizard_pending(inventory: dict) -> bool:
 
 
 def parse_stable_version(name: str) -> tuple[int, ...] | None:
-    """Parse semver from artifact name. Returns None for non-stable (rc, dev, etc.).
+    r"""Parse semver from artifact name. Returns None for non-stable (rc, dev, etc.).
 
     TEMP: also matches a trailing "-dev" suffix so the wizard_pending re-auth
     gate can be tested with a -dev artifact instead of a real stable release.
@@ -211,7 +211,24 @@ def create_deployment(device_id: str, artifact_name: str) -> None:
     resp.raise_for_status()
 
 
-def deploy_if_outdated(device_id: str, node_id: str | None, requires_wizard_check: bool = False) -> bool:
+# Mender keeps a device's last-known inventory until it's overwritten by a
+# fresh submission. Right after a reflash, the device's auth/DBus stack can
+# take 30-90s+ to settle (see real-world log: repeated "Unauthorized" inventory
+# push failures before it finally succeeds), so the very first check after
+# accepting a re-auth can race ahead of the device's own first post-reflash
+# inventory submission and read stale data from the OLD install — which never
+# had the wizard_pending attribute at all. Without a grace window, that one
+# unlucky check permanently discards the device from the queue before its
+# real inventory ever lands.
+WIZARD_CHECK_GRACE_SECONDS = 300
+
+
+def deploy_if_outdated(
+    device_id: str,
+    node_id: str | None,
+    requires_wizard_check: bool = False,
+    queued_at: float | None = None,
+) -> bool:
     """Check device OS version and create deployment if outdated.
 
     requires_wizard_check is set for re-authenticated (reflashed) devices,
@@ -221,6 +238,11 @@ def deploy_if_outdated(device_id: str, node_id: str | None, requires_wizard_chec
     auto-deploy to the former, gated on the wizard_pending inventory
     attribute retina-gui's setup wizard reports (see
     mender-inventory-retina-wizard in owl-os).
+
+    queued_at is when this device was first queued — used to give the gate a
+    grace window (WIZARD_CHECK_GRACE_SECONDS) rather than a one-shot verdict,
+    since the device's first post-reflash inventory submission can race ahead
+    or behind node-infra's check.
 
     Returns True if handled (deployed, up-to-date, or correctly skipped).
     Returns False if inventory not ready yet (will retry next cycle).
@@ -245,6 +267,11 @@ def deploy_if_outdated(device_id: str, node_id: str | None, requires_wizard_chec
         return False
 
     if requires_wizard_check and not extract_wizard_pending(inventory):
+        age = time.time() - queued_at if queued_at is not None else WIZARD_CHECK_GRACE_SECONDS
+        if age < WIZARD_CHECK_GRACE_SECONDS:
+            print(f"  {label}: wizard_pending not yet true (possibly stale inventory from "
+                  f"before reflash), retrying — {WIZARD_CHECK_GRACE_SECONDS - age:.0f}s left in grace window")
+            return False
         print(f"  {label}: re-authed but not running first-time wizard, skipping deployment")
         return True
 
@@ -275,13 +302,14 @@ def deploy_if_outdated(device_id: str, node_id: str | None, requires_wizard_chec
 
 
 def load_pending_deploys() -> dict[str, dict]:
-    """Load {device_id: {"node_id": ..., "requires_wizard_check": ...}} map of
-    devices awaiting deployment.
+    """Load {device_id: {"node_id", "requires_wizard_check", "queued_at"}} map
+    of devices awaiting deployment.
 
     Normalizes entries written by older versions of this script, which
     stored a bare node_id string instead of a dict (those were always
     freshly-pending devices, never re-auth, so requires_wizard_check=False
-    is the correct backfill).
+    is the correct backfill — queued_at doesn't matter for them since the
+    grace window only applies when requires_wizard_check is True).
     """
     try:
         with open(PENDING_DEPLOY_FILE) as f:
@@ -292,9 +320,14 @@ def load_pending_deploys() -> dict[str, dict]:
     normalized = {}
     for device_id, value in raw.items():
         if isinstance(value, dict):
+            value.setdefault("queued_at", time.time())
             normalized[device_id] = value
         else:
-            normalized[device_id] = {"node_id": value, "requires_wizard_check": False}
+            normalized[device_id] = {
+                "node_id": value,
+                "requires_wizard_check": False,
+                "queued_at": time.time(),
+            }
     return normalized
 
 
@@ -356,6 +389,7 @@ def main() -> int:
                         pending_deploys[device_id] = {
                             "node_id": node_id,
                             "requires_wizard_check": device_id in reauth_device_ids,
+                            "queued_at": time.time(),
                         }
                 except requests.RequestException as e:
                     print(f"Error accepting {node_id or device_id}: {e}", file=sys.stderr)
@@ -374,6 +408,7 @@ def main() -> int:
         for device_id, info in list(pending_deploys.items()):
             node_id = info["node_id"]
             requires_wizard_check = info.get("requires_wizard_check", False)
+            queued_at = info.get("queued_at")
             label = node_id or device_id[:8]
 
             # Validate device is still accepted — remove stale entries
@@ -382,7 +417,7 @@ def main() -> int:
                 done.append(device_id)
                 continue
 
-            if deploy_if_outdated(device_id, node_id, requires_wizard_check):
+            if deploy_if_outdated(device_id, node_id, requires_wizard_check, queued_at):
                 done.append(device_id)
 
         for device_id in done:
