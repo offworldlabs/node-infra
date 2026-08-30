@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the tunnel sync every 5 minutes
+
+[Timer]
+# Deliberately slower than mender-auto-accept's 30s. Nodes report their intent
+# through Mender inventory, which owl-os polls every 600s, so anything faster
+# than a few minutes only adds API calls without shortening the wait.
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

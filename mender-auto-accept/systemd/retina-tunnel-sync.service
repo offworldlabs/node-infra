@@ -1,0 +1,20 @@
+[Unit]
+Description=Give nodes that asked for it a Cloudflare tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# --apply, not --prune. Pruning deletes tunnels and DNS records, so orphans are
+# reported to the journal for a human to look at rather than removed on a timer.
+ExecStart=/root/retina/node-infra/mender-auto-accept/.venv/bin/python /root/retina/node-infra/mender-auto-accept/tunnel_sync.py --apply
+EnvironmentFile=/root/retina/node-infra/mender-auto-accept/.env
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=no
+PrivateTmp=yes
+# The state file lives beside the script, so that directory has to stay writable
+# under ProtectSystem=strict.
+ReadWritePaths=/root/retina/node-infra/mender-auto-accept
