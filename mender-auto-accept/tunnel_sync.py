@@ -11,6 +11,17 @@ That inversion is the whole point: there is no node-facing endpoint here, so
 there is nothing to authenticate. Mender's PAT proves we are Offworld and
 Mender's device auth proves the node is the node, both of which already work.
 
+## Who may then reach the node
+
+A Cloudflare Access application per hostname, whose policy references the
+support group by id. Nothing personal appears in this repo or on any node:
+membership lives in that one group, so adding or removing someone takes effect
+across the whole fleet at once, with no application edited and no node touched.
+
+Per node rather than one wildcard application, because a wildcard over the zone
+would also cover the hand-built hostnames on it, several of which serve people
+outside the support team.
+
 ## Why this is a separate script from auto_accept.py
 
 auto_accept.py accepts devices and deploys OS updates for the entire fleet. If
@@ -51,6 +62,8 @@ Environment variables:
     CLOUDFLARE_API_TOKEN: Scoped to Tunnel:Edit and DNS:Edit (required to --apply)
     CLOUDFLARE_ACCOUNT_ID: (required to --apply)
     CLOUDFLARE_ZONE_ID: zone id for REMOTE_ACCESS_DOMAIN (required to --apply)
+    CLOUDFLARE_ACCESS_GROUP_ID: the support group each node's policy references
+    CLOUDFLARE_ACCESS_TEAM_DOMAIN: <team>.cloudflareaccess.com, sent to nodes
     REMOTE_ACCESS_SERVICE: what the tunnel points at (default: http://localhost:80)
 """
 import argparse
@@ -75,6 +88,17 @@ CF_API = "https://api.cloudflare.com/client/v4"
 CF_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
 CF_ACCOUNT = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
 CF_ZONE = os.environ.get("CLOUDFLARE_ZONE_ID")
+#: The Access group allowed to reach nodes. Referenced by id from every node's
+#: application, so no address ever appears in this repo's config, and adding or
+#: removing someone is one edit that applies to the whole fleet at once rather
+#: than a sweep across as many applications as there are nodes.
+CF_ACCESS_GROUP = os.environ.get("CLOUDFLARE_ACCESS_GROUP_ID")
+CF_ACCESS_TEAM_DOMAIN = os.environ.get("CLOUDFLARE_ACCESS_TEAM_DOMAIN")
+
+#: How long an engineer's Access session lasts. Matches the existing
+#: applications; worth revisiting separately, since this one gates every node in
+#: the fleet rather than a single host.
+ACCESS_SESSION_DURATION = "24h"
 
 STATE_FILE = os.environ.get(
     "TUNNEL_STATE_FILE",
@@ -82,6 +106,12 @@ STATE_FILE = os.environ.get(
 )
 
 HEADERS = {"Authorization": f"Bearer {MENDER_PAT}"} if MENDER_PAT else {}
+
+#: Both files node-infra stages for a node, and where owl-os's path unit
+#: watches. access.json names the team and this node's Access application, which
+#: retina-gui verifies assertions against; the node refuses every visitor until
+#: it has them.
+STAGING_ACCESS_PATH = "/home/node/.retina/access.json"
 
 #: Where owl-os's cloudflared-token.path watches. Mender file transfer is
 #: chrooted to /home/node and writes as that user, which is why the token lands
@@ -226,8 +256,67 @@ def _cf(method, path, **kwargs):
     return resp.json()["result"]
 
 
+def ensure_access_app(node_id):
+    """Find or create this node's Access application, and return its audience.
+
+    Per node rather than one wildcard application, because a wildcard over the
+    zone would also cover the hand-built hostnames on it, several of which serve
+    people who are not on the support team. Locking them out is not this
+    feature's business.
+
+    The policy references the support group by id rather than listing people, so
+    membership lives in one object and changing it applies everywhere at once
+    without touching a single application or node.
+    """
+    _guard(node_id)
+    if not CF_ACCESS_GROUP:
+        raise RuntimeError(
+            "CLOUDFLARE_ACCESS_GROUP_ID is not set. Refusing to create an "
+            "application with no policy, which would publish an unprotected "
+            "hostname.")
+
+    hostname = f"{node_id}.{REMOTE_ACCESS_DOMAIN}"
+    apps = _cf("GET", f"/accounts/{CF_ACCOUNT}/access/apps", params={"per_page": 1000})
+    app = next((a for a in apps if a.get("domain") == hostname), None)
+
+    if app is None:
+        app = _cf("POST", f"/accounts/{CF_ACCOUNT}/access/apps", json={
+            "name": f"node {node_id}",
+            "domain": hostname,
+            "type": "self_hosted",
+            "session_duration": ACCESS_SESSION_DURATION,
+        })
+
+    # Created separately rather than inline, and checked every time. An
+    # application with no policy admits nobody, but one whose policy was removed
+    # by hand would otherwise sit there looking provisioned.
+    policies = _cf("GET", f"/accounts/{CF_ACCOUNT}/access/apps/{app['id']}/policies")
+    has_group = any(
+        inc.get("group", {}).get("id") == CF_ACCESS_GROUP
+        for p in policies if p.get("decision") == "allow"
+        for inc in (p.get("include") or [])
+    )
+    if not has_group:
+        _cf("POST", f"/accounts/{CF_ACCOUNT}/access/apps/{app['id']}/policies", json={
+            "name": "support team",
+            "decision": "allow",
+            "include": [{"group": {"id": CF_ACCESS_GROUP}}],
+        })
+
+    return app["aud"]
+
+
+def destroy_access_app(node_id):
+    """Remove this node's Access application, if it has one."""
+    _guard(node_id)
+    hostname = f"{node_id}.{REMOTE_ACCESS_DOMAIN}"
+    for app in _cf("GET", f"/accounts/{CF_ACCOUNT}/access/apps", params={"per_page": 1000}):
+        if app.get("domain") == hostname:
+            _cf("DELETE", f"/accounts/{CF_ACCOUNT}/access/apps/{app['id']}")
+
+
 def ensure_tunnel(node_id):
-    """Find or create this node's tunnel, and return (tunnel_id, token).
+    """Find or create this node's tunnel, and return (tunnel_id, token, aud).
 
     Looks up by name before creating, so a lost state file recovers the
     existing tunnel instead of leaving an orphan behind and making a second.
@@ -249,10 +338,15 @@ def ensure_tunnel(node_id):
             {"service": "http_status:404"},
         ]}})
 
+    # Before the DNS record, always. The moment that record resolves the
+    # hostname serves this node's interface, so creating the policy afterwards
+    # leaves a window in which anyone who finds the name is inside.
+    aud = ensure_access_app(node_id)
+
     _upsert_dns(node_id, tunnel_id)
 
     token = _cf("GET", f"/accounts/{CF_ACCOUNT}/cfd_tunnel/{tunnel_id}/token")
-    return tunnel_id, token
+    return tunnel_id, token, aud
 
 
 def _upsert_dns(node_id, tunnel_id):
@@ -301,8 +395,13 @@ def destroy_tunnel(node_id, tunnel_id):
 
 # ── talking to the device ────────────────────────────────────────
 
-def stage_on_device(device_id, content):
-    """Put the token where owl-os's path unit is watching.
+def list_access_apps():
+    """Every Access application in the account. One call, like the others."""
+    return _cf("GET", f"/accounts/{CF_ACCOUNT}/access/apps", params={"per_page": 1000})
+
+
+def stage_on_device(device_id, path, content):
+    """Put a file where owl-os's path unit is watching.
 
     An empty body is the documented "turn it off" signal: a *missing* file
     cannot mean that, because it is also what a token the node has already
@@ -314,15 +413,23 @@ def stage_on_device(device_id, content):
     resp = requests.put(
         f"{MENDER_SERVER}/api/management/v1/deviceconnect/devices/{device_id}/upload",
         headers=HEADERS,
-        files={"path": (None, STAGING_PATH), "file": ("tunnel-token", content)},
+        files={"path": (None, path), "file": (os.path.basename(path), content)},
         timeout=60,
     )
+    if resp.status_code == 400:
+        # Almost always the staging directory not existing, which means the node
+        # is on an OS build without the cloudflared role. Worth saying, because
+        # the bare status reads as a malformed request.
+        raise requests.RequestException(
+            f"upload of {path} refused (400). The staging directory probably "
+            f"does not exist, which means this node predates the owl-os role "
+            f"that creates it.")
     resp.raise_for_status()
 
 
 # ── reconciling ──────────────────────────────────────────────────
 
-def reconcile(wanted, state, tunnels, dns_records):
+def reconcile(wanted, state, tunnels, dns_records, access_apps):
     """Compare what should exist against what Cloudflare actually holds.
 
     `wanted` is the set of node_ids currently asking for a tunnel. Pure, like
@@ -345,6 +452,7 @@ def reconcile(wanted, state, tunnels, dns_records):
     """
     by_name = {t["name"]: t for t in tunnels}
     cnames = {r["name"]: r for r in dns_records if r.get("type") == "CNAME"}
+    protected = {a.get("domain") for a in access_apps}
 
     repairs, orphans, notes = [], [], []
 
@@ -355,6 +463,13 @@ def reconcile(wanted, state, tunnels, dns_records):
         if not tunnel:
             repairs.append((node_id, "we recorded a tunnel that no longer exists"))
             continue
+
+        # Checked before anything else about this node. A hostname that
+        # resolves with no Access application in front of it is serving the
+        # interface to whoever finds the name, which is a different order of
+        # problem from a stale DNS record.
+        if hostname not in protected:
+            repairs.append((node_id, "NO ACCESS POLICY: this hostname is unprotected"))
 
         dns = cnames.get(hostname)
         if not dns:
@@ -374,6 +489,14 @@ def reconcile(wanted, state, tunnels, dns_records):
         name = tunnel["name"]
         if NODE_ID_RE.match(name) and name not in wanted and name not in state:
             orphans.append(("tunnel", name, tunnel["id"]))
+
+    for app in access_apps:
+        domain = app.get("domain") or ""
+        node_id = domain.split(".")[0]
+        if (domain.endswith("." + REMOTE_ACCESS_DOMAIN)
+                and NODE_ID_RE.match(node_id)
+                and node_id not in wanted and node_id not in state):
+            orphans.append(("access-app", domain, app["id"]))
 
     for record in dns_records:
         name = record.get("name", "")
@@ -442,7 +565,7 @@ def main() -> int:
     if CF_TOKEN and CF_ACCOUNT and CF_ZONE:
         try:
             repairs, orphans, notes = reconcile(
-                wanted, state, list_tunnels(), list_dns())
+                wanted, state, list_tunnels(), list_dns(), list_access_apps())
         except (requests.RequestException, RuntimeError) as e:
             print(f"  could not reconcile against Cloudflare: {e}", file=sys.stderr)
     elif args.apply:
@@ -469,10 +592,19 @@ def main() -> int:
         key = node_id or device_id
         try:
             if action == "create":
-                tunnel_id, token = ensure_tunnel(node_id)
-                stage_on_device(device_id, token)
+                tunnel_id, token, aud = ensure_tunnel(node_id)
+                # access.json first: the node refuses every visitor until it can
+                # verify assertions, so landing the token first would bring the
+                # hostname up during the gap. It fails closed rather than open,
+                # but it is an outage nobody needs to have.
+                stage_on_device(device_id, STAGING_ACCESS_PATH, json.dumps({
+                    "team_domain": CF_ACCESS_TEAM_DOMAIN,
+                    "aud": aud,
+                }).encode())
+                stage_on_device(device_id, STAGING_PATH, token)
                 state[key] = {"tunnel_id": tunnel_id, "device_id": device_id,
                               "hostname": f"{node_id}.{REMOTE_ACCESS_DOMAIN}",
+                              "aud": aud,
                               "provisioned_at": time.time()}
                 print(f"  provisioned {key}")
             elif action == "teardown":
@@ -480,12 +612,14 @@ def main() -> int:
                 # Clear the node's token first so the connector stops; a tunnel
                 # with live connections refuses deletion.
                 try:
-                    stage_on_device(device_id, b"")
+                    stage_on_device(device_id, STAGING_PATH, b"")
+                    stage_on_device(device_id, STAGING_ACCESS_PATH, b"")
                 except requests.RequestException as e:
-                    print(f"  {key}: could not clear the node's token ({e}); "
+                    print(f"  {key}: could not clear the node's files ({e}); "
                           f"removing the tunnel anyway, which revokes access",
                           file=sys.stderr)
                 destroy_tunnel(node_id, record.get("tunnel_id"))
+                destroy_access_app(node_id)
                 state.pop(key, None)
                 print(f"  tore down {key}")
         except (requests.RequestException, RuntimeError) as e:
@@ -511,6 +645,9 @@ def main() -> int:
                 if kind == "tunnel":
                     _guard(name)
                     _cf("DELETE", f"/accounts/{CF_ACCOUNT}/cfd_tunnel/{ident}")
+                elif kind == "access-app":
+                    _guard(name.split(".")[0])
+                    _cf("DELETE", f"/accounts/{CF_ACCOUNT}/access/apps/{ident}")
                 else:
                     _guard(name.split(".")[0])
                     _cf("DELETE", f"/zones/{CF_ZONE}/dns_records/{ident}")
