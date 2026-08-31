@@ -378,19 +378,55 @@ def list_dns():
     return _cf("GET", f"/zones/{CF_ZONE}/dns_records", params={"per_page": 5000})
 
 
-def destroy_tunnel(node_id, tunnel_id):
-    """Reverse order: DNS first, then the tunnel once its connector has gone.
+def destroy_dns(node_id):
+    """Delete the hostname. This is the step that actually revokes access.
 
-    A tunnel with live connections refuses deletion, which is why the node's
-    token is cleared before this runs. Access dies with the DNS record either
-    way, so an unreachable node cannot keep itself reachable.
+    Kept separate from the tunnel, and always run first, because it is the only
+    part of teardown that depends on nothing but Cloudflare answering. The node
+    may be offline and the tunnel may refuse to die; neither prevents the name
+    from ceasing to resolve, and once it does, nobody can reach the node whatever
+    else is still lying around.
     """
     _guard(node_id)
     hostname = f"{node_id}.{REMOTE_ACCESS_DOMAIN}"
     for record in _cf("GET", f"/zones/{CF_ZONE}/dns_records", params={"name": hostname}):
         _cf("DELETE", f"/zones/{CF_ZONE}/dns_records/{record['id']}")
-    if tunnel_id:
+
+
+def destroy_tunnel(node_id, tunnel_id):
+    """Delete the tunnel object, which Cloudflare refuses while it has callers.
+
+    Error 1022 is that refusal, and it is expected rather than exceptional: a
+    node that has not yet dropped its connections still holds them for a few
+    minutes, and a node that is offline holds stale ones for about as long.
+    Both resolve themselves, so this reports the tunnel as still pending instead
+    of failing the teardown around it.
+
+    Returns True when the tunnel is gone.
+    """
+    _guard(node_id)
+    if not tunnel_id:
+        return True
+    try:
         _cf("DELETE", f"/accounts/{CF_ACCOUNT}/cfd_tunnel/{tunnel_id}")
+        return True
+    except requests.HTTPError as e:
+        if _cf_error_code(e) == 1022:
+            return False
+        # Already gone is the outcome this asked for. Treating it as a failure
+        # would keep the state entry forever, retrying a deletion that can
+        # never succeed and reporting a teardown as permanently unfinished.
+        if e.response is not None and e.response.status_code == 404:
+            return True
+        raise
+
+
+def _cf_error_code(exc):
+    """Cloudflare's own error code from a failed response, or None."""
+    try:
+        return (exc.response.json().get("errors") or [{}])[0].get("code")
+    except Exception:
+        return None
 
 
 # ── talking to the device ────────────────────────────────────────
@@ -459,6 +495,16 @@ def reconcile(wanted, state, tunnels, dns_records, access_apps):
     for node_id, _record in sorted(state.items()):
         hostname = f"{node_id}.{REMOTE_ACCESS_DOMAIN}"
         tunnel = by_name.get(node_id)
+
+        # An entry kept only so a half-finished teardown gets retried. Its DNS
+        # record is *meant* to be gone, so every check below would report the
+        # deliberate state as damage and invite somebody to "repair" a node
+        # back into existence after its owner withdrew consent.
+        if _record.get("revoked"):
+            if tunnel:
+                notes.append((node_id, "access revoked; tunnel still awaiting "
+                                       "removal"))
+            continue
 
         if not tunnel:
             repairs.append((node_id, "we recorded a tunnel that no longer exists"))
@@ -609,19 +655,49 @@ def main() -> int:
                 print(f"  provisioned {key}")
             elif action == "teardown":
                 record = state.get(key, {})
-                # Clear the node's token first so the connector stops; a tunnel
-                # with live connections refuses deletion.
+                # Clearing the node's token stops the connector, which is what
+                # lets the tunnel be deleted. It needs the node online, and an
+                # owner who withdraws consent while their node is offline has
+                # withdrawn it just the same, so this cannot be allowed to
+                # decide whether the teardown proceeds.
                 try:
                     stage_on_device(device_id, STAGING_PATH, b"")
                     stage_on_device(device_id, STAGING_ACCESS_PATH, b"")
                 except requests.RequestException as e:
                     print(f"  {key}: could not clear the node's files ({e}); "
-                          f"removing the tunnel anyway, which revokes access",
-                          file=sys.stderr)
-                destroy_tunnel(node_id, record.get("tunnel_id"))
-                destroy_access_app(node_id)
-                state.pop(key, None)
-                print(f"  tore down {key}")
+                          f"revoking access anyway", file=sys.stderr)
+
+                # Unconditionally, and before anything that can fail: once the
+                # name stops resolving the node is unreachable, whatever else
+                # remains to be tidied.
+                destroy_dns(node_id)
+
+                # Each of these fails on its own terms. Bundling them meant a
+                # tunnel that refused to die took the Access application with
+                # it, orphaning an application on a hostname that no longer
+                # exists and would be silently reused if the owner ever opted
+                # back in.
+                pending = []
+                try:
+                    destroy_access_app(node_id)
+                except requests.RequestException as e:
+                    pending.append(f"Access application ({e})")
+                try:
+                    if not destroy_tunnel(node_id, record.get("tunnel_id")):
+                        pending.append("tunnel (still has connections)")
+                except requests.RequestException as e:
+                    pending.append(f"tunnel ({e})")
+
+                if pending:
+                    # The entry stays so the next pass retries. It records that
+                    # access is already gone, so a later run does not report
+                    # this as though the owner were still exposed.
+                    state.setdefault(key, {})["revoked"] = True
+                    print(f"  {key}: access revoked; still to remove: "
+                          f"{'; '.join(pending)}. Will retry.")
+                else:
+                    state.pop(key, None)
+                    print(f"  tore down {key}")
         except (requests.RequestException, RuntimeError) as e:
             # One node's failure must not stop the rest of the pass.
             print(f"  {key}: {action} failed: {e}", file=sys.stderr)
@@ -630,9 +706,20 @@ def main() -> int:
     # it finds the tunnel by name, rewrites the ingress and upserts the DNS
     # record. The token is not re-sent, because a node that already has a
     # working one does not need it and a node that does not is offline anyway.
+    #
+    # Filtered against what the owner currently wants, and that filter is the
+    # whole point rather than a precaution. `repairs` was computed from the
+    # state as it stood at the top of this pass, before any teardown ran, so a
+    # node being torn down right now looks damaged: its DNS record really is
+    # missing, because we just deleted it. Repairing that meant recreating the
+    # hostname of a node whose owner had turned support access off, seconds
+    # after honouring them. An agreement that the next pass quietly reverses is
+    # not an agreement.
     for node_id, why in repairs:
+        if node_id not in wanted:
+            continue
         try:
-            tunnel_id, _ = ensure_tunnel(node_id)
+            tunnel_id, _token, _aud = ensure_tunnel(node_id)
             state.setdefault(node_id, {})["tunnel_id"] = tunnel_id
             state[node_id]["hostname"] = f"{node_id}.{REMOTE_ACCESS_DOMAIN}"
             print(f"  repaired {node_id} ({why})")
