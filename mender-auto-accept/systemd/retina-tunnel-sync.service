@@ -1,0 +1,26 @@
+[Unit]
+Description=Give nodes that asked for it a Cloudflare tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# --apply, not --prune. Pruning deletes tunnels and DNS records, so orphans are
+# reported to the journal for a human to look at rather than removed on a timer.
+ExecStart=/root/retina/node-infra/mender-auto-accept/.venv/bin/python /root/retina/node-infra/mender-auto-accept/tunnel_sync.py --apply
+EnvironmentFile=/root/retina/node-infra/mender-auto-accept/.env
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=no
+PrivateTmp=yes
+# systemd creates /var/lib/retina-tunnel-sync and makes it writable. The state
+# file records which nodes we have provisioned, so it must outlive a deploy:
+# keeping it beside the script put mutable state inside a git checkout, where a
+# pull or a branch change could disturb it. Losing it does not orphan anything
+# (reconciliation finds tunnels by name), but it would make the next pass
+# rebuild state it should simply have known.
+#
+# TUNNEL_STATE_FILE in the EnvironmentFile must point inside this directory.
+StateDirectory=retina-tunnel-sync
