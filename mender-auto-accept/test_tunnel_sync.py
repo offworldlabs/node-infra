@@ -10,7 +10,6 @@ it is how a hand-built tunnel in this account was misconfigured.
 import re
 
 import pytest
-
 import tunnel_sync
 
 NODE = "ret4c844c20"
