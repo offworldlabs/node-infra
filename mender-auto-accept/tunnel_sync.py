@@ -84,6 +84,24 @@ REMOTE_ACCESS_DOMAIN = os.environ.get("REMOTE_ACCESS_DOMAIN", "retnode.com")
 #: port without touching the running GUI.
 REMOTE_ACCESS_SERVICE = os.environ.get("REMOTE_ACCESS_SERVICE", "http://localhost:80")
 
+#: The other two things a node serves that support needs to see: blah2's web
+#: assets and blah2's API. They are separate ports on the node, and both are
+#: reached through the one support hostname rather than hostnames of their own.
+BLAH2_WEB_SERVICE = os.environ.get("BLAH2_WEB_SERVICE", "http://localhost:49152")
+BLAH2_API_SERVICE = os.environ.get("BLAH2_API_SERVICE", "http://localhost:3000")
+
+#: blah2's API endpoints, named one by one rather than matched as a whole
+#: `^/api` prefix. retina-gui owns /api/mode, /api/fleet/peers,
+#: /api/spectrum/ready and others on this same hostname, so a blanket prefix
+#: would divert those to blah2 and break the interface over the tunnel while
+#: leaving it working perfectly on the LAN. Naming them fails loudly when blah2
+#: gains an endpoint, which is far better than silently stealing a GUI route.
+BLAH2_API_PATH = r"^/(api/(timestamp|detection|map|adsb2dd|config)|capture|stash)"
+
+#: blah2's web assets. The three views support actually uses live under
+#: /display/ and /controller/; /lib and /js are what those pages load.
+BLAH2_WEB_PATH = r"^/(display|controller|lib|js)"
+
 CF_API = "https://api.cloudflare.com/client/v4"
 CF_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
 CF_ACCOUNT = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
@@ -315,6 +333,38 @@ def destroy_access_app(node_id):
             _cf("DELETE", f"/accounts/{CF_ACCOUNT}/access/apps/{app['id']}")
 
 
+def build_ingress(node_id):
+    """The tunnel's complete ingress config, as a list of rules.
+
+    Pure, and separate from the call that writes it, so what a node will serve
+    can be read and asserted without touching Cloudflare.
+
+    **Order is the whole thing.** cloudflared takes the first rule whose
+    hostname and path both match, so every rule carrying a path must come
+    before the one that does not. A catch-all placed above them matches
+    everything and silently disables the rest: the rules are still listed, still
+    look right in the dashboard, and never fire. That is not hypothetical, it is
+    how a hand-built tunnel in this account was configured, and the only symptom
+    was 404s that looked like the origin was down.
+    """
+    hostname = f"{node_id}.{REMOTE_ACCESS_DOMAIN}"
+    return [
+        {"hostname": hostname, "path": BLAH2_API_PATH, "service": BLAH2_API_SERVICE},
+        {"hostname": hostname, "path": BLAH2_WEB_PATH, "service": BLAH2_WEB_SERVICE},
+        {"hostname": hostname, "service": REMOTE_ACCESS_SERVICE},
+        {"service": "http_status:404"},
+    ]
+
+
+def read_ingress(tunnel_id):
+    """What Cloudflare currently holds for this tunnel, or [] if unreadable."""
+    try:
+        cfg = _cf("GET", f"/accounts/{CF_ACCOUNT}/cfd_tunnel/{tunnel_id}/configurations")
+    except requests.RequestException:
+        return []
+    return ((cfg or {}).get("config") or {}).get("ingress") or []
+
+
 def ensure_tunnel(node_id):
     """Find or create this node's tunnel, and return (tunnel_id, token, aud).
 
@@ -331,12 +381,8 @@ def ensure_tunnel(node_id):
                       json={"name": node_id, "config_src": "cloudflare"})
         tunnel_id = created["id"]
 
-    hostname = f"{node_id}.{REMOTE_ACCESS_DOMAIN}"
     _cf("PUT", f"/accounts/{CF_ACCOUNT}/cfd_tunnel/{tunnel_id}/configurations",
-        json={"config": {"ingress": [
-            {"hostname": hostname, "service": REMOTE_ACCESS_SERVICE},
-            {"service": "http_status:404"},
-        ]}})
+        json={"config": {"ingress": build_ingress(node_id)}})
 
     # Before the DNS record, always. The moment that record resolves the
     # hostname serves this node's interface, so creating the policy afterwards
@@ -524,6 +570,19 @@ def reconcile(wanted, state, tunnels, dns_records, access_apps):
             repairs.append((node_id, "DNS points at a different tunnel"))
         elif not dns.get("proxied"):
             repairs.append((node_id, "DNS record is not proxied"))
+
+        # Costs one call per *provisioned* node, so it scales with opt-ins
+        # rather than fleet size, which is why it is affordable where a
+        # per-device check would not be.
+        #
+        # Worth the call because ingress fails silently. A rule in the wrong
+        # order is still listed, still reads correctly to a human, and simply
+        # never fires; the only symptom is 404s that look like a dead origin.
+        # Nothing else in this script would ever notice, and a hand-edit in the
+        # dashboard is exactly how it happens.
+        if read_ingress(tunnel["id"]) != build_ingress(node_id):
+            repairs.append((node_id, "ingress does not match: the paths support "
+                                     "needs may be unrouted or shadowed"))
 
         if not tunnel.get("connections"):
             # Not a repair. The node may simply be off, and re-provisioning
