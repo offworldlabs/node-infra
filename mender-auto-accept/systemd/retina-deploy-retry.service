@@ -1,0 +1,27 @@
+[Unit]
+Description=Re-issue Mender deployments that failed for transient reasons
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# --apply, not a report-only run. Without it the pass prints what it would do
+# and changes nothing, which is the right default when running it by hand but
+# would make this timer a no-op.
+ExecStart=/root/retina/node-infra/mender-auto-accept/.venv/bin/python /root/retina/node-infra/mender-auto-accept/deploy_retry.py --apply
+EnvironmentFile=/root/retina/node-infra/mender-auto-accept/.env
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=no
+PrivateTmp=yes
+# The attempt counts are the only thing stopping a node that fails identically
+# every time from being retried forever, so they must outlive a deploy. Keeping
+# them beside the script would put mutable state inside a git checkout, where a
+# pull could disturb them; losing the file resets every count to zero.
+#
+# deploy_retry.py reads systemd's STATE_DIRECTORY for itself, so the
+# EnvironmentFile needs no path. The pass refuses to create anything if this
+# turns out to be unwritable, rather than making deployments it cannot count.
+StateDirectory=retina-deploy-retry

@@ -60,3 +60,78 @@ Edit `.env`:
 2. Script fetches pending devices from Mender API
 3. Filters by `node_id` prefix (if configured)
 4. Accepts matching devices
+
+
+## Failed-deployment retry
+
+Re-issues Mender deployments that failed **before the artifact reached the
+node**, so an update lost to a broken download recovers without anyone
+deploying it by hand.
+
+Hosted Mender has a "Retries" field on a deployment, but it is a paid-plan
+feature: on the `os` plan, creating a deployment with one is rejected with
+`403 Feature not available in your Plan.` The client's own retry does not cover
+this either. It resumes a broken download, but once the CDN answers with an
+unexpected HTTP status it treats that as fatal and fails the deployment with
+most of its ten retries unused.
+
+### What it will and will not retry
+
+Only one failure is considered fixable: the artifact never finished arriving.
+Nothing was written to the node and nothing about the node caused it, so an
+identical request has an independent chance of succeeding.
+
+Everything else is refused, **including failures it cannot read**. The costs are
+asymmetric: a missed retry costs one hand deployment, while a wrong retry
+reboots a live node on a timer for a reason that will not change. So the test is
+an allowlist and the default is to do nothing.
+
+| In the final attempt of the device log | Retried |
+|---|---|
+| `Unexpected status code while fetching artifact` | yes |
+| `Giving up on resuming the download` | yes |
+| `No space left on device`, too big, incompatible, bad signature | no |
+| `Process returned non-zero exit status`, `ArtifactRollback` | no |
+| Anything else, an unreadable log, no log at all | no |
+
+Two properties of Mender's device log make the naive version of this wrong, and
+both were measured against real fleet logs:
+
+* **The log is cumulative across attempts.** One node's carries three attempts
+  at the same deployment, plus lines dated four months earlier from a clock
+  skew. Only the text after the final `Deployment with ID ... started` is
+  classified, so an old disk-full line cannot veto a retry forever, and an old
+  transport error cannot authorise one.
+* **`Installing artifact...` does not mark the install phase.** It is printed
+  about a second after the deployment starts, before the download. On one node
+  it appears five hours before the download gives up. Phase cannot be inferred
+  from it.
+
+### Other limits
+
+* A retry is skipped while the device is already running a deployment, if the
+  artifact has landed since the failure, or if the device is no longer accepted.
+* `DEPLOY_RETRY_MAX_ATTEMPTS` (2) per device+artifact, then it stops and leaves
+  it for a person.
+* `DEPLOY_RETRY_MAX_PER_PASS` (5) caps one pass, so a fleet-wide outage cannot
+  become a fleet-wide burst.
+* Attempt counts are written before the next deployment is created, and the pass
+  aborts up front if they cannot be written at all. Deployments that cannot be
+  counted are how a retry becomes a storm.
+
+### Install
+
+```bash
+sudo cp systemd/retina-deploy-retry.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now retina-deploy-retry.timer
+```
+
+### Check what it would do
+
+Without `--apply` it reports and changes nothing. Run this first:
+
+```bash
+cd ~/retina/node-infra/mender-auto-accept
+MENDER_PAT=your-token .venv/bin/python deploy_retry.py
+```
