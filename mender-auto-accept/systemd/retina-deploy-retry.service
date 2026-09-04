@@ -5,10 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-# --apply, not a report-only run. Without it the pass prints what it would do
-# and changes nothing, which is the right default when running it by hand but
-# would make this timer a no-op.
-ExecStart=/root/retina/node-infra/mender-auto-accept/.venv/bin/python /root/retina/node-infra/mender-auto-accept/deploy_retry.py --apply
+# Deliberately no --apply, so the pass reports its verdict on every real failure
+# and creates nothing. The create path has never run against the fleet, and the
+# classifier reads log prose that only Mender controls, so the journal earns the
+# trust first. Add --apply and daemon-reload to let it act.
+ExecStart=/root/retina/node-infra/mender-auto-accept/.venv/bin/python /root/retina/node-infra/mender-auto-accept/deploy_retry.py
 EnvironmentFile=/root/retina/node-infra/mender-auto-accept/.env
 
 # Security hardening

@@ -127,9 +127,20 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now retina-deploy-retry.timer
 ```
 
-### Check what it would do
+**The unit runs without `--apply`, so it creates nothing.** It reports a verdict
+on every real failure and leaves them alone. That is deliberate: the create path
+has never run against the fleet, and the classifier reads log wording that only
+Mender controls, so the journal earns the trust first.
 
-Without `--apply` it reports and changes nothing. Run this first:
+```bash
+journalctl -u retina-deploy-retry
+```
+
+If its verdicts match the calls you would have made, add `--apply` to
+`ExecStart` and `systemctl daemon-reload`. Until then a failure it would have
+retried still needs a deployment by hand.
+
+### Check what it would do, by hand
 
 ```bash
 cd ~/retina/node-infra/mender-auto-accept
