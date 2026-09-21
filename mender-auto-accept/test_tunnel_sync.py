@@ -99,3 +99,85 @@ def test_the_final_rule_is_a_catch_all():
 def test_another_node_is_not_served_by_this_tunnel():
     for rule in tunnel_sync.build_ingress(NODE):
         assert rule.get("hostname") in (HOST, None)
+
+
+# ── which names this script may touch, and which it owns ─────────────
+#
+# Two questions, one shape, opposite failure modes. They used to share a
+# constant, so widening the node id format for one purpose silently widened it
+# for the other — and the other decides what --prune deletes.
+
+#: Every tunnel on retnode.com as of 2026-09-21 that this script did not create.
+#: Several serve live customer nodes. If any of these ever matches, --prune
+#: deletes somebody's working tunnel.
+HAND_BUILT = [
+    "fairforest",
+    "jonathan-node-1",
+    "jonathan-node-2",
+    "joshOffice",
+    "mississippi",
+    "nightcrawler",
+    "sacremento",
+    "wilderness",
+]
+
+LEGACY_ID = "ret4c844c20"
+CURRENT_ID = "retgec420d03ea4b064"
+
+
+@pytest.mark.parametrize("node_id", [LEGACY_ID, CURRENT_ID])
+def test_both_node_id_formats_may_be_acted_on(node_id):
+    """The fleet is migrated one node at a time, so both are live at once."""
+    tunnel_sync._guard(node_id)
+
+
+@pytest.mark.parametrize(
+    "name",
+    HAND_BUILT + ["", None, "retg", "ret000000000", "retgec420d03ea4b06", "Unknown"],
+)
+def test_guard_refuses_anything_that_is_not_a_node_id(name):
+    with pytest.raises(RuntimeError, match="refusing to act"):
+        tunnel_sync._guard(name)
+
+
+@pytest.mark.parametrize("name", HAND_BUILT)
+def test_hand_built_tunnels_are_not_ours_to_sweep(name):
+    """The property the orphan sweep rests on. Too narrow costs a lingering
+    orphan; too wide deletes a production tunnel."""
+    assert not tunnel_sync.OWNED_BY_US.match(name)
+
+
+@pytest.mark.parametrize("node_id", [LEGACY_ID, CURRENT_ID])
+def test_node_tunnels_in_either_format_are_ours(node_id):
+    assert tunnel_sync.OWNED_BY_US.match(node_id)
+
+
+def test_reconcile_never_offers_a_hand_built_tunnel_as_an_orphan():
+    """End to end, because the constant being right is not the same as it being
+    used in all three sweeps."""
+    tunnels = [{"name": n, "id": f"id-{n}", "connections": []} for n in HAND_BUILT]
+    tunnels.append({"name": CURRENT_ID, "id": "id-node", "connections": []})
+
+    _, orphans, _ = tunnel_sync.reconcile(
+        wanted=set(), state={}, tunnels=tunnels, dns_records=[], access_apps=[]
+    )
+
+    assert [name for _, name, _ in orphans] == [CURRENT_ID]
+
+
+def test_the_dns_and_access_sweeps_agree_with_the_tunnel_sweep():
+    """All three read OWNED_BY_US. A hand-built hostname in the zone must not
+    be swept from any of them."""
+    domain = tunnel_sync.REMOTE_ACCESS_DOMAIN
+    dns = [
+        {"name": f"{n}.{domain}", "type": "CNAME", "id": f"dns-{n}"}
+        for n in HAND_BUILT + [CURRENT_ID]
+    ]
+    apps = [{"domain": f"{n}.{domain}", "id": f"app-{n}"} for n in HAND_BUILT + [CURRENT_ID]]
+
+    _, orphans, _ = tunnel_sync.reconcile(
+        wanted=set(), state={}, tunnels=[], dns_records=dns, access_apps=apps
+    )
+
+    swept = {name for _, name, _ in orphans}
+    assert swept == {f"{CURRENT_ID}.{domain}"}

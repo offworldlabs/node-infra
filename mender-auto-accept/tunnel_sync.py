@@ -138,24 +138,47 @@ STAGING_PATH = "/home/node/.retina/tunnel-token"
 
 ABSENT = "absent"
 
+#: Both node_id formats the fleet carries: ret<8 hex> is the legacy format,
+#: retg<15 hex> the current one. Nodes are migrated one at a time, so both are
+#: live at once and this script sees every node in the fleet.
+_NODE_ID = r"ret(?:[0-9a-f]{8}|g[0-9a-f]{15})"
+
 #: Names this script is allowed to create, reconfigure or delete.
 #:
 #: retnode.com already carries hand-built tunnels for live customer nodes, some
 #: serving several hostnames each, and ensure_tunnel() PUTs a tunnel's *entire*
 #: ingress config. A miscomputed name would therefore not fail, it would quietly
 #: replace a working tunnel's routing or delete a production DNS record. Nothing
-#: existing is named ret<8 hex>, so pinning the shape makes that unreachable
+#: existing is named like a node id, so pinning the shape makes that unreachable
 #: rather than merely unlikely.
-NODE_ID_RE = re.compile(r"^ret[0-9a-f]{8}$")
+#:
+#: Too narrow here is safe: the worst case is refusing to act.
+MAY_ACT_ON = re.compile(rf"^{_NODE_ID}$")
+
+#: Names this script considers its own, for deciding what is an orphan.
+#:
+#: Identical to MAY_ACT_ON today, and deliberately a separate constant, because
+#: it answers the opposite question and fails the opposite way. "May I touch
+#: this?" is safe to get wrong by being too narrow. "Is this mine, and therefore
+#: rubbish to sweep up?" is *dangerous* to get wrong by being too wide: an
+#: over-broad pattern claims something somebody built by hand, and --prune then
+#: deletes it.
+#:
+#: They were one constant, so widening the format for one purpose silently
+#: widened it for the other. Before adding a format here, check the zone: as of
+#: 2026-09-21 the eight hand-built tunnels (fairforest, jonathan-node-1,
+#: jonathan-node-2, joshOffice, mississippi, nightcrawler, sacremento,
+#: wilderness) match neither format, and nothing in it begins retg.
+OWNED_BY_US = re.compile(rf"^{_NODE_ID}$")
 
 
 def _guard(node_id):
     """Raise unless this is a name we are allowed to touch."""
-    if not node_id or not NODE_ID_RE.match(node_id):
+    if not node_id or not MAY_ACT_ON.match(node_id):
         raise RuntimeError(
-            f"refusing to act on {node_id!r}: not a ret<8 hex> node id. "
-            f"retnode.com carries hand-built tunnels that this script must "
-            f"never reconfigure or delete."
+            f"refusing to act on {node_id!r}: not a ret<8 hex> or retg<15 hex> "
+            f"node id. retnode.com carries hand-built tunnels that this script "
+            f"must never reconfigure or delete."
         )
 
 
@@ -526,7 +549,9 @@ def reconcile(wanted, state, tunnels, dns_records, access_apps):
     Returns (repairs, orphans, notes):
       repairs  things we believe exist but do not, or point somewhere wrong.
                Fixed by re-running ensure_tunnel, which is idempotent.
-      orphans  ret<8 hex> tunnels and records nothing wants any more. Reported
+      orphans  node-id-shaped tunnels and records nothing wants any more, by
+               OWNED_BY_US rather than MAY_ACT_ON: this decides what --prune
+               may delete, so a name we do not own must never match. Reported
                rather than deleted unless --prune, because a Mender outage that
                returned a short device list would otherwise look exactly like a
                fleet that had all opted out.
@@ -592,14 +617,14 @@ def reconcile(wanted, state, tunnels, dns_records, access_apps):
 
     for tunnel in tunnels:
         name = tunnel["name"]
-        if NODE_ID_RE.match(name) and name not in wanted and name not in state:
+        if OWNED_BY_US.match(name) and name not in wanted and name not in state:
             orphans.append(("tunnel", name, tunnel["id"]))
 
     for app in access_apps:
         domain = app.get("domain") or ""
         node_id = domain.split(".")[0]
         if (domain.endswith("." + REMOTE_ACCESS_DOMAIN)
-                and NODE_ID_RE.match(node_id)
+                and OWNED_BY_US.match(node_id)
                 and node_id not in wanted and node_id not in state):
             orphans.append(("access-app", domain, app["id"]))
 
@@ -608,7 +633,7 @@ def reconcile(wanted, state, tunnels, dns_records, access_apps):
         node_id = name.split(".")[0]
         if (record.get("type") == "CNAME"
                 and name.endswith("." + REMOTE_ACCESS_DOMAIN)
-                and NODE_ID_RE.match(node_id)
+                and OWNED_BY_US.match(node_id)
                 and node_id not in wanted and node_id not in state):
             orphans.append(("dns", name, record["id"]))
 
