@@ -146,3 +146,30 @@ retried still needs a deployment by hand.
 cd ~/retina/node-infra/mender-auto-accept
 MENDER_PAT=your-token .venv/bin/python deploy_retry.py
 ```
+
+## Per-node rollout report
+
+`rollout_report.py` says, for every accepted node, whether the latest stable
+release has landed, and if not, why. It reads the rootfs-image and
+docker-compose version attributes (never `artifact_name`, which is only the last
+artifact of any type) and uses `deploy_retry.classify` for failure reasons, so
+the report and the retry agree.
+
+| Verdict | Meaning |
+|---|---|
+| landed | on both target versions; flagged if `retina_stack` is not `up` |
+| test build | running a `-dev` build |
+| pending | the rollout is waiting for it to check in, including a node offline since before the rollout |
+| retryable | failed for a reason `deploy_retry` would retry |
+| not targeted | no deployment of the target reached it, e.g. accepted after the rollout was created |
+| needs a person | failed for a reason no retry fixes |
+
+```bash
+cd ~/retina/node-infra/mender-auto-accept
+MENDER_PAT=your-token .venv/bin/python rollout_report.py
+MENDER_PAT=your-token .venv/bin/python rollout_report.py --owl-os owl-os-pi5-v0.17.0 --retina-node retina-node-v0.4.6.0 --json
+```
+
+"All devices" rollouts only cover devices accepted when the rollout was
+created. A node accepted later is never offered that rollout and shows as
+not targeted; onboarding is what covers new nodes.
