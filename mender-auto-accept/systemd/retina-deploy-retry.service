@@ -1,0 +1,28 @@
+[Unit]
+Description=Re-issue Mender deployments that failed for transient reasons
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Deliberately no --apply, so the pass reports its verdict on every real failure
+# and creates nothing. The create path has never run against the fleet, and the
+# classifier reads log prose that only Mender controls, so the journal earns the
+# trust first. Add --apply and daemon-reload to let it act.
+ExecStart=/root/retina/node-infra/mender-auto-accept/.venv/bin/python /root/retina/node-infra/mender-auto-accept/deploy_retry.py
+EnvironmentFile=/root/retina/node-infra/mender-auto-accept/.env
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=no
+PrivateTmp=yes
+# The attempt counts are the only thing stopping a node that fails identically
+# every time from being retried forever, so they must outlive a deploy. Keeping
+# them beside the script would put mutable state inside a git checkout, where a
+# pull could disturb them; losing the file resets every count to zero.
+#
+# deploy_retry.py reads systemd's STATE_DIRECTORY for itself, so the
+# EnvironmentFile needs no path. The pass refuses to create anything if this
+# turns out to be unwritable, rather than making deployments it cannot count.
+StateDirectory=retina-deploy-retry

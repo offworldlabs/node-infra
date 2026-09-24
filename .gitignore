@@ -9,3 +9,4 @@ __pycache__/
 
 # Runtime state
 .pending-deploys.json
+.deploy-retries.json

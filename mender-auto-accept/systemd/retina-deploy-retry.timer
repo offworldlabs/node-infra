@@ -1,0 +1,15 @@
+[Unit]
+Description=Retry failed Mender deployments every 15 minutes
+
+[Timer]
+# Deliberately slower than mender-auto-accept's 30s. A failed deployment is not
+# urgent, and a node that has just failed one is often still settling: rushing
+# back in risks stacking a retry behind work it has not finished reporting.
+# Kept well under DEPLOY_RETRY_BACKOFF_SECONDS so the backoff, not the timer,
+# is what paces attempts.
+OnBootSec=5min
+OnUnitActiveSec=15min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
