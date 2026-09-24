@@ -295,3 +295,137 @@ def test_device_log_returns_none_when_the_api_fails(monkeypatch):
 
     monkeypatch.setattr(deploy_retry.requests, "get", boom)
     assert deploy_retry.device_log("dep", "dev") is None
+
+
+# --- Failures the first version missed (2026-09-24 replay over all 45 logs) ---
+
+# nightcrawler2, deployment dde1802e: three hours of resumed reads on Wi-Fi,
+# then the client killed its own download.
+NIGHTCRAWLER2_TIMEOUT = """\
+2026-09-04 10:07:03.44 +0000 UTC info: Deployment with ID dde1802e started.
+2026-09-04 10:07:04.274 +0000 UTC info: Installing artifact...
+2026-09-04 11:10:03.08 +0000 UTC info: Resuming download after 60 seconds. Retry 1/10
+2026-09-04 14:07:04.337 +0000 UTC info: Sending SIGTERM to PID 2631957
+2026-09-04 14:07:04.355 +0000 UTC info: PID 2631957 exited with status 15
+2026-09-04 14:07:04.355 +0000 UTC error: Connection timed out: Update Module Download process timed out
+2026-09-04 14:07:04.356 +0000 UTC error: Operation canceled: GET https://r2.cloudflarestorage.com/mender-artifacts-us/a4102b9c
+"""
+
+# Jonathan 1, deployment f20eee61: the client lost its pipe to the module.
+JONATHAN1_STREAM = """\
+2026-06-18 17:58:17.342 +0000 UTC info: Deployment with ID f20eee61 started.
+2026-06-18 17:58:23.828 +0000 UTC info: Installing artifact...
+2026-06-18 18:01:41.358 +0000 UTC error: Cancel::open() returned error: No such file or directory
+2026-06-18 18:01:41.38 +0000 UTC error: No such file or directory: Cannot open /var/lib/mender/modules/v3/payloads/0000/tree/stream-next
+2026-06-18 18:01:41.454 +0000 UTC error: Operation canceled: GET https://r2.cloudflarestorage.com/mender-artifacts-us/86cea7f7
+"""
+
+# retc47d6f72, owl-os v0.17.0, deployment d175ca0d: the site lost power at the
+# reboot into the new partition and the node was dark for eight hours. It came
+# back on the old partition, so ArtifactVerifyReboot failed: the A/B fallback
+# working, not a broken image.
+RETC47_POWER_CUT_AT_REBOOT = """\
+2026-09-24 02:13:47.371 +0000 UTC info: Deployment with ID d175ca0d started.
+2026-09-24 02:15:00.945 +0000 UTC info: Sending status update to server
+2026-09-24 02:15:01.235 +0000 UTC info: Calling `reboot` command and waiting for system to restart.
+2026-09-24 02:15:01.366 +0000 UTC info: Termination signal received, shutting down gracefully
+2026-09-24 10:02:12.702 +0000 UTC info: Running mender-update 5.1.0
+2026-09-24 10:02:12.922 +0000 UTC info: The update client daemon is now ready to handle incoming deployments
+2026-09-24 10:02:13.228 +0000 UTC error: Process returned non-zero exit status: ArtifactVerifyReboot: Process exited with status 1
+2026-09-24 10:02:52.793 +0000 UTC info: Running mender-update 5.1.0
+2026-09-24 10:02:53.367 +0000 UTC info: Running State Script: /var/lib/mender/scripts/ArtifactFailure_Enter_00_retina_state
+"""
+
+# ret9573ecda, owl-os v0.17.0, deployment d175ca0d: dark for four hours while
+# installing.
+RET9573_POWER_CUT_MID_INSTALL = """\
+2026-09-23 22:21:41.897 +0000 UTC info: Deployment with ID d175ca0d started.
+2026-09-23 22:21:42.147 +0000 UTC info: Running State Script: /etc/mender/scripts/Download_Enter_00_retina_state
+2026-09-23 22:21:42.451 +0000 UTC info: Installing artifact...
+2026-09-24 02:13:35.612 +0000 UTC info: Running mender-update 5.1.0
+2026-09-24 02:13:35.763 +0000 UTC info: The update client daemon is now ready to handle incoming deployments
+2026-09-24 02:13:35.805 +0000 UTC info: Sending status update to server
+"""
+
+# Josh Test Node 2, deployment 71fe1a9b: a deliberate sysrq power cut, back in
+# 51 s. Too short to tell apart from a quick reboot, so it is not counted.
+SHORT_POWER_CUT = """\
+2026-09-24 10:33:01.292 +0000 UTC info: Deployment with ID 71fe1a9b started.
+2026-09-24 10:35:55.588 +0000 UTC info: Update Module output (stdout): extracting images
+2026-09-24 10:36:46.448 +0000 UTC info: Running mender-update 5.1.0
+2026-09-24 10:36:50.041 +0000 UTC info: Update Module output (stdout): Rolling back docker-compose artifact retina-node-v0.4.6.0
+"""
+
+# What a broken OS image looks like: it reboots, comes back within a minute on
+# the old partition, and fails verification. Retrying it would reboot a live
+# node again for nothing.
+BROKEN_OS_IMAGE = """\
+2026-09-24 12:00:00.000 +0000 UTC info: Deployment with ID bad0s000 started.
+2026-09-24 12:03:00.000 +0000 UTC info: Calling `reboot` command and waiting for system to restart.
+2026-09-24 12:03:41.000 +0000 UTC info: Running mender-update 5.1.0
+2026-09-24 12:03:41.500 +0000 UTC error: Process returned non-zero exit status: ArtifactVerifyReboot: Process exited with status 1
+"""
+
+# A failed install step, then a power cut. The failure came first and is the
+# cause; the power cut does not make it retryable.
+FAILED_THEN_POWER_CUT = """\
+2026-09-24 12:00:00.000 +0000 UTC info: Deployment with ID fail0000 started.
+2026-09-24 12:04:00.000 +0000 UTC error: Process returned non-zero exit status: ArtifactInstall: Process exited with status 1
+2026-09-24 16:00:00.000 +0000 UTC info: Running mender-update 5.1.0
+"""
+
+
+def test_a_download_that_timed_out_is_retried():
+    assert deploy_retry.classify(NIGHTCRAWLER2_TIMEOUT) == (True, "the artifact never finished downloading")
+
+
+def test_a_lost_stream_to_the_module_is_retried():
+    assert deploy_retry.classify(JONATHAN1_STREAM) == (True, "the artifact never finished downloading")
+
+
+@pytest.mark.parametrize("log,hours", [(RETC47_POWER_CUT_AT_REBOOT, "7.8"), (RET9573_POWER_CUT_MID_INSTALL, "3.9")])
+def test_a_long_power_cut_is_reported_but_not_retried_by_default(log, hours, monkeypatch):
+    monkeypatch.setattr(deploy_retry, "RETRY_INTERRUPTED", False)
+    retry, reason = deploy_retry.classify(log)
+    assert retry is False
+    assert f"power lost mid-deployment (node dark {hours} h)" in reason
+    assert "not enabled" in reason
+
+
+@pytest.mark.parametrize("log", [RETC47_POWER_CUT_AT_REBOOT, RET9573_POWER_CUT_MID_INSTALL])
+def test_a_long_power_cut_is_retried_once_enabled(log, monkeypatch):
+    monkeypatch.setattr(deploy_retry, "RETRY_INTERRUPTED", True)
+    retry, reason = deploy_retry.classify(log)
+    assert retry is True
+    assert reason.startswith("power lost mid-deployment")
+
+
+@pytest.mark.parametrize("log", [SHORT_POWER_CUT, BROKEN_OS_IMAGE, FAILED_THEN_POWER_CUT])
+def test_a_short_gap_or_an_earlier_failure_is_never_read_as_a_power_cut(log, monkeypatch):
+    monkeypatch.setattr(deploy_retry, "RETRY_INTERRUPTED", True)
+    retry, reason = deploy_retry.classify(log)
+    assert retry is False
+    assert "power lost" not in reason
+
+
+def test_disk_full_still_vetoes_a_power_cut(monkeypatch):
+    monkeypatch.setattr(deploy_retry, "RETRY_INTERRUPTED", True)
+    log = RET9573_POWER_CUT_MID_INSTALL + "2026-09-24 02:14:00.000 +0000 UTC error: No space left on device\n"
+    assert deploy_retry.classify(log) == (False, "no disk space on the node")
+
+
+# nightcrawler1, deployment d0c9144c: the download gave up, and the node was
+# then off for 44 hours. The failure is the download, not the power cut.
+NIGHTCRAWLER1_GAVE_UP_THEN_DARK = """\
+2026-08-23 12:52:58.618 +0000 UTC info: Deployment with ID d0c9144c started.
+2026-08-23 12:53:08.624 +0000 UTC info: Installing artifact...
+2026-08-23 16:50:37.434 +0000 UTC info: Resuming download after 60 seconds. Retry 10/10
+2026-08-23 17:29:04.684 +0000 UTC error: Resume download error: Giving up on resuming the download: Tried maximum number of times: Exponential backoff
+2026-08-25 13:41:04.317 +0000 UTC info: Running mender-update 5.1.0
+"""
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_a_download_that_gave_up_before_a_power_cut_is_still_a_download_failure(enabled, monkeypatch):
+    monkeypatch.setattr(deploy_retry, "RETRY_INTERRUPTED", enabled)
+    assert deploy_retry.classify(NIGHTCRAWLER1_GAVE_UP_THEN_DARK) == (True, "the artifact never finished downloading")

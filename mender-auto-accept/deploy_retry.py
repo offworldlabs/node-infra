@@ -99,11 +99,30 @@ LANDED_STATUSES = frozenset({"success", "already-installed"})
 ATTEMPT_START = re.compile(r"Deployment with ID \S+ started")
 
 # The artifact never finished arriving. These are the only failures retried, and
-# both are Mender's own wording for giving up on the fetch itself.
+# all are Mender's own wording for giving up on the fetch itself.
 FETCH_FAILED = [
     re.compile(r"Unexpected status code while fetching artifact", re.I),
     re.compile(r"Giving up on resuming the download", re.I),
+    # nightcrawler2, owl-os v0.16.1, 2026-09-04: three hours of resumed reads on
+    # Wi-Fi, then the client killed its own download.
+    re.compile(r"Update Module Download process timed out", re.I),
+    # Jonathan 1, owl-os v0.8.20, 2026-06-18: the client lost its streaming
+    # pipe to the module mid-download.
+    re.compile(r"Cannot open \S*/stream-next", re.I),
 ]
+
+# A power cut mid-deployment, recognised by the node going dark: the client
+# daemon starts again after a silence longer than INTERRUPT_GAP. ret9573ecda and
+# retc47d6f72 were dark for four and eight hours on 2026-09-24. A broken OS image
+# reboots within about a minute and then fails ArtifactVerifyReboot, so the gap
+# keeps it out. Retrying these is stage 3 of the rollout agreed on 2026-09-24 and
+# waits for the retina-node preflight and the forked Update Module to reach the
+# fleet, so it is off unless DEPLOY_RETRY_INTERRUPTED=1. Until then the verdict
+# is still reported.
+RETRY_INTERRUPTED = os.environ.get("DEPLOY_RETRY_INTERRUPTED") == "1"
+INTERRUPT_GAP = timedelta(minutes=int(os.environ.get("DEPLOY_RETRY_INTERRUPT_GAP_MINUTES", "10")))
+DAEMON_START = re.compile(r"Running mender-update \d")
+LOG_TS = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 # The node's own condition caused the failure and still holds, so an identical
 # deployment fails identically. Overrides everything.
@@ -168,6 +187,26 @@ def last_attempt(log: str) -> str:
     return log[matches[-1].start():] if matches else log
 
 
+def dark_for(tail: str) -> timedelta | None:
+    """How long the node went dark mid-attempt, if it did for INTERRUPT_GAP or more.
+
+    Only a restart before any update step has failed counts: a failure that came
+    first is the cause, and the power cut after it is not.
+    """
+    previous = None
+    for line in tail.splitlines():
+        if PROCESS_FAILED.search(line):
+            return None
+        stamp = LOG_TS.match(line)
+        if not stamp:
+            continue
+        ts = datetime.strptime(stamp.group(1), "%Y-%m-%d %H:%M:%S")
+        if DAEMON_START.search(line) and previous is not None and ts - previous >= INTERRUPT_GAP:
+            return ts - previous
+        previous = ts
+    return None
+
+
 def classify(log: str | None) -> tuple[bool, str]:
     """Decide whether a new deployment can fix this failure.
 
@@ -184,10 +223,21 @@ def classify(log: str | None) -> tuple[bool, str]:
     for pattern, reason in DEVICE_STATE:
         if pattern.search(tail):
             return False, reason
-    if PROCESS_FAILED.search(tail):
-        return False, "an update step ran and failed on the node"
-    if any(pattern.search(tail) for pattern in FETCH_FAILED):
+    process_failed = PROCESS_FAILED.search(tail)
+    # A download that gave up is the failure even when the node went dark after
+    # it (nightcrawler1, v0.4.4.0: gave up, then off for 44 hours), and nothing
+    # on the node was touched, so it is checked before the power cut.
+    if not process_failed and any(pattern.search(tail) for pattern in FETCH_FAILED):
         return True, "the artifact never finished downloading"
+    gap = dark_for(tail)
+    if gap is not None:
+        hours = gap.total_seconds() / 3600
+        if RETRY_INTERRUPTED:
+            return True, f"power lost mid-deployment (node dark {hours:.1f} h)"
+        return False, (f"power lost mid-deployment (node dark {hours:.1f} h); "
+                       "retrying these is not enabled (DEPLOY_RETRY_INTERRUPTED)")
+    if process_failed:
+        return False, "an update step ran and failed on the node"
     return False, "failed for an unrecognised reason"
 
 
