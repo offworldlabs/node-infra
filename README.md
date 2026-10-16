@@ -53,6 +53,7 @@ Edit `.env`:
 | `MENDER_PAT` | Yes | Personal Access Token from Mender UI |
 | `MENDER_SERVER` | No | Default: `https://hosted.mender.io` |
 | `NODE_ID_PREFIX` | No | Only accept nodes with this prefix (e.g., `ret`) |
+| `RETINA_SYNC_TARGETS` | No | Comma-separated `url=token` pairs, one per retina-server environment. Unset means no snapshot is pushed. See below |
 
 ### How it works
 
@@ -60,6 +61,48 @@ Edit `.env`:
 2. Script fetches pending devices from Mender API
 3. Filters by `node_id` prefix (if configured)
 4. Accepts matching devices
+
+### Fleet snapshot to retina-server
+
+After every sweep, `auto_accept.py` sends retina-server a snapshot of the whole
+Mender fleet. It runs even if the deploy phase fails. The script reads every
+device from Mender (devauth v2 plus inventory v1, paged, no status filter) and
+POSTs one JSON snapshot to each target. `NODE_ID_PREFIX` only limits which
+devices get accepted. The snapshot is not filtered by it.
+
+`RETINA_SYNC_TARGETS` is a comma-separated list of `url=token` pairs, one per
+retina-server environment:
+
+```
+RETINA_SYNC_TARGETS=https://retina.example/api/internal/mender/snapshot=<prod token>,https://staging.retina.example/api/internal/mender/snapshot=<staging token>,https://test.retina.example/api/internal/mender/snapshot=<test token>
+```
+
+* The url is the full endpoint, `https://<host>/api/internal/mender/snapshot`.
+  Plain `http` is only accepted for localhost.
+* The token is that environment's `MENDER_SYNC_TOKEN`. Each pair is split at the
+  first `=`, so a token may contain `=`.
+* Prod and staging are the usual targets. Test is optional. The test server
+  stays on `MENDER_SOURCE=api`, so it doesn't need one.
+* If the variable is unset or empty, nothing is fetched or pushed.
+
+Each POST has a 10 second timeout. A failing target doesn't stop the others. A
+409 means that server already has a newer snapshot, and counts as success. The
+result for each target is printed with the accepted, rejected and absent
+counts the server returned. A non-zero rejected count means a device was dropped
+or stored with an issue, and the retina-server log names it.
+
+The POST carries a browser User-Agent, because Cloudflare answers a script's
+default one with 403 error 1010.
+
+There is no retry queue. The next sweep, 30 seconds later, is the retry. A
+target that stays unreachable shows up on the retina-server side as a stale
+mirror, and that is where the alerting lives.
+
+If any Mender fetch fails, nothing is pushed that sweep. A partial fleet would
+mark devices absent.
+
+The Mender token stays on this host and is never sent to retina-server. The sync
+tokens are separate, one per environment.
 
 
 ## Failed-deployment retry
