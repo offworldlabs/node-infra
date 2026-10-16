@@ -25,6 +25,7 @@ import re
 import sys
 import time
 
+import mender_snapshot
 import requests
 
 MENDER_SERVER = os.environ.get("MENDER_SERVER", "https://hosted.mender.io")
@@ -420,4 +421,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # The snapshot goes out even when the pass fails or raises: it reads Mender
+    # itself, and the mirror goes stale without it. It never raises, so the
+    # exit status and any traceback are still main's.
+    try:
+        exit_code = main()
+    finally:
+        mender_snapshot.run()
+    sys.exit(exit_code)
