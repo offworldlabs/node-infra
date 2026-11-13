@@ -173,3 +173,19 @@ MENDER_PAT=your-token .venv/bin/python rollout_report.py --owl-os owl-os-pi5-v0.
 "All devices" rollouts only cover devices accepted when the rollout was
 created. A node accepted later is never offered that rollout and shows as
 not targeted; onboarding is what covers new nodes.
+
+## License
+
+Copyright (C) 2026 Offworld Labs
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero
+General Public License for more details.
+
+The full licence text is in [LICENSE](LICENSE).
